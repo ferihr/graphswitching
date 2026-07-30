@@ -5,6 +5,9 @@ obtained by applying Godsil--McKay (GM) or Wang--Qiu--Hu (WQH) switching once
 to a regular graph. The programs were written for experiments with strongly
 regular graphs.
 
+> **Development notice:** Unlike the original code, `graphswitching` will be
+> mostly vibe coded. Use it at your own risk.
+
 ## Programs
 
 | Program | Switching operation | Configuration |
@@ -20,7 +23,7 @@ vertices and a maximum part size of 8.
 
 ## Quick start
 
-Build all four programs:
+Build all five programs:
 
 ```sh
 make
@@ -89,7 +92,8 @@ switching programs themselves.
 - `tools/graphswitching.c` contains the command-line interface and its
   buffered output setup.
 - `code/` contains the unchanged original standalone programs.
-- `tests/` contains inputs used to compare the new tool with the original.
+- `tests/` contains regular-graph inputs used to compare the new tool with
+  the original, including Petersen, Clebsch, Paley(73), and Sp(6,2) graphs.
 
 The command-line parsing and matrix output are kept separate from the search
 implementation so conventional options and other output formats can be added
