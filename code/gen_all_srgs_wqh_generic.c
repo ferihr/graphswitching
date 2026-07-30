@@ -25,7 +25,7 @@
 
 #define MAX_VTS 448
 
-#define INTT int32_t
+#define INTT uint32_t
 #define BLKS 14 /* we need MAX_VTS <= sizeof(INTT)*8*BLKS */
 #define BLKSZ 5 /* ld(sizeof(INTT)*8) */
 #define LOWBLK 31 /* has to be 2^BLKS-1 */
