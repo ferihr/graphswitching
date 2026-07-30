@@ -8,7 +8,18 @@ PKG_CONFIG ?= pkg-config
 WITH_NAUTY ?= auto
 NAUTY_PKG_CPPFLAGS := $(shell $(PKG_CONFIG) --cflags nauty 2>/dev/null)
 NAUTY_PKG_LDLIBS := $(shell $(PKG_CONFIG) --libs nauty 2>/dev/null)
-NAUTY_CPPFLAGS ?= $(NAUTY_PKG_CPPFLAGS)
+NAUTY_DEFAULT_HEADER := $(shell \
+	printf '%s\n' '#include <nauty.h>' \
+	| $(CC) $(CPPFLAGS) -x c -E - >/dev/null 2>&1 \
+	&& printf 1 || printf 0)
+NAUTY_HEADER_DIRS ?= /usr/local/include/nauty /usr/include/nauty
+NAUTY_SYSTEM_HEADER_DIR := $(firstword $(foreach dir,$(NAUTY_HEADER_DIRS),\
+	$(if $(wildcard $(dir)/nauty.h),$(dir))))
+NAUTY_SYSTEM_CPPFLAGS := $(if $(NAUTY_SYSTEM_HEADER_DIR),\
+	-isystem $(NAUTY_SYSTEM_HEADER_DIR))
+NAUTY_CPPFLAGS ?= $(if $(NAUTY_PKG_CPPFLAGS),\
+	$(NAUTY_PKG_CPPFLAGS),$(if $(filter 1,$(NAUTY_DEFAULT_HEADER)),,\
+	$(NAUTY_SYSTEM_CPPFLAGS)))
 NAUTY_LDLIBS ?= $(if $(NAUTY_PKG_LDLIBS),$(NAUTY_PKG_LDLIBS),-lnauty)
 
 ifeq ($(WITH_NAUTY),1)

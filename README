@@ -206,7 +206,7 @@ With nauty support detected, run the orbit-representative suite with:
 
 The runner automatically recognizes both the unprefixed nauty program names
 (amtog, labelg) and the names used by some Linux distributions
-(nauty-amtog, nauty-labelg). See benchmarks/README.md for explicit
+(nauty-amtog, nauty-labelg). See benchmarks/README for explicit
 overrides and a description of every case.
 
 Background
