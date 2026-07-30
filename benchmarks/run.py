@@ -66,11 +66,12 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--suite",
-        choices=("quick", "full"),
+        choices=("quick", "full", "extrafull", "symmetry"),
         default="quick",
         help=(
-            "quick runs Sp(6,2); full adds every extended WQH case, "
-            "including Bil(2,2,3) and Sp(4,4)"
+            "quick runs Sp(6,2); full adds the extended WQH cases; "
+            "extrafull also runs the very slow legacy Sp(4,4) case; "
+            "symmetry runs the nauty-enabled orbit-representative cases"
         ),
     )
     parser.add_argument(
@@ -104,9 +105,10 @@ def read_manifest() -> list[BenchmarkCase]:
                     f"{MANIFEST}:{line_number}: expected 7 tab-separated fields"
                 )
             name, suite, program, arguments, input_path, expected, focus = row
-            if suite not in ("quick", "full"):
+            if suite not in ("quick", "full", "extrafull", "symmetry"):
                 raise ValueError(
-                    f"{MANIFEST}:{line_number}: suite must be quick or full"
+                    f"{MANIFEST}:{line_number}: suite must be quick, full, "
+                    "extrafull, or symmetry"
                 )
             cases.append(
                 BenchmarkCase(
@@ -167,7 +169,17 @@ def select_cases(
         return [by_name[name] for name in requested]
     if suite == "quick":
         return [case for case in cases if case.suite == "quick"]
-    return list(cases)
+    if suite == "full":
+        return [
+            case for case in cases if case.suite in ("quick", "full")
+        ]
+    if suite == "extrafull":
+        return [
+            case
+            for case in cases
+            if case.suite in ("quick", "full", "extrafull")
+        ]
+    return [case for case in cases if case.suite == "symmetry"]
 
 
 def find_command(command: str) -> str | None:

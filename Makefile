@@ -4,6 +4,31 @@ CFLAGS ?= -O3 -funroll-loops
 WARNFLAGS ?= -Wall -Wextra
 LDFLAGS ?=
 LDLIBS ?=
+PKG_CONFIG ?= pkg-config
+WITH_NAUTY ?= auto
+NAUTY_PKG_CPPFLAGS := $(shell $(PKG_CONFIG) --cflags nauty 2>/dev/null)
+NAUTY_PKG_LDLIBS := $(shell $(PKG_CONFIG) --libs nauty 2>/dev/null)
+NAUTY_CPPFLAGS ?= $(NAUTY_PKG_CPPFLAGS)
+NAUTY_LDLIBS ?= $(if $(NAUTY_PKG_LDLIBS),$(NAUTY_PKG_LDLIBS),-lnauty)
+
+ifeq ($(WITH_NAUTY),1)
+NAUTY_ENABLED := 1
+else ifeq ($(WITH_NAUTY),auto)
+NAUTY_ENABLED := $(shell \
+	printf '%s\n' '#include <nauty.h>' \
+		'int main(void) { nauty_check(WORDSIZE, 1, 1, NAUTYVERSIONID); return 0; }' \
+	| $(CC) $(CPPFLAGS) $(NAUTY_CPPFLAGS) -x c - -x none \
+		$(LDFLAGS) $(NAUTY_LDLIBS) -o /dev/null \
+		>/dev/null 2>&1 && printf 1 || printf 0)
+else
+NAUTY_ENABLED := 0
+endif
+
+ifeq ($(NAUTY_ENABLED),1)
+GRAPHSWITCHING_CPPFLAGS := \
+	$(NAUTY_CPPFLAGS) -DGRAPHSWITCHING_WITH_NAUTY
+GRAPHSWITCHING_LDLIBS := $(NAUTY_LDLIBS)
+endif
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
@@ -35,23 +60,39 @@ BENCHMARK_PROGRAMS := \
 	gen_all_srgs_64vts \
 	gen_all_srgs_wqh_generic
 
-.PHONY: all benchmark check clean install uninstall
+.PHONY: all benchmark check check-symmetry clean install uninstall FORCE
 
 all: $(PROGRAMS)
 
 $(LEGACY_PROGRAMS): %: $(SOURCE_DIR)/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
 
-graphswitching: $(TOOL_SOURCE) $(LIBRARY_SOURCE) \
+graphswitching: FORCE $(TOOL_SOURCE) $(LIBRARY_SOURCE) \
 		$(INCLUDE_DIR)/graphswitching.h $(VERSION_FILE)
-	$(CC) $(CPPFLAGS) $(VERSION_CPPFLAGS) -I$(INCLUDE_DIR) \
+	$(CC) $(CPPFLAGS) $(GRAPHSWITCHING_CPPFLAGS) \
+		$(VERSION_CPPFLAGS) -I$(INCLUDE_DIR) \
 		$(CFLAGS) $(WARNFLAGS) \
-		$(TOOL_SOURCE) $(LIBRARY_SOURCE) $(LDFLAGS) $(LDLIBS) -o $@
+		$(TOOL_SOURCE) $(LIBRARY_SOURCE) $(LDFLAGS) \
+		$(LDLIBS) $(GRAPHSWITCHING_LDLIBS) -o $@
+
+FORCE:
 
 benchmark: $(BENCHMARK_PROGRAMS)
 	$(PYTHON) benchmarks/run.py \
 		--suite "$(BENCHMARK_SUITE)" \
 		--runs "$(BENCHMARK_RUNS)" $(BENCHMARK_CASES)
+
+check-symmetry: graphswitching
+	@if test "$(NAUTY_ENABLED)" != 1; then \
+		echo "check-symmetry: graphswitching was built without nauty" \
+			>&2; \
+		exit 2; \
+	fi
+	$(PYTHON) benchmarks/run.py \
+		sp6-wqh-sym-p2 \
+		gq2-4-wqh-sym-p5 \
+		bil223-wqh-sym-p3 \
+		sp4-4-wqh-sym-p4
 
 check: $(PROGRAMS) $(TEST_CASES)
 	$(PYTHON) tests/generate_algebraic_fixtures.py
@@ -79,7 +120,7 @@ check: $(PROGRAMS) $(TEST_CASES)
 		"graphswitching $$(sed -n '1p' VERSION)"; \
 	help=$$(./graphswitching --help); \
 	for option in --method --vertices --part-size --input --output \
-		--help --version; do \
+		--sym --help --version; do \
 		printf '%s\n' "$$help" | grep -q -- "$$option"; \
 	done; \
 	printf '%s\n' "$$help" | grep -q -- 'P,P,N-2P'; \
@@ -99,6 +140,13 @@ check: $(PROGRAMS) $(TEST_CASES)
 		> /dev/null 2>&1; then exit 1; fi; \
 	if ./graphswitching --part-size 2 < tests/petersen.matrix \
 		> /dev/null 2>&1; then exit 1; fi; \
+	if test "$(NAUTY_ENABLED)" = 1; then \
+		./graphswitching --method wqh --sym \
+			< tests/petersen.matrix > /dev/null; \
+	elif ./graphswitching --method wqh --sym \
+		< tests/petersen.matrix > /dev/null 2>&1; then \
+		exit 1; \
+	fi; \
 	printf "Checking default GM against gen_all_srgs (Sp(6,2))... "; \
 	gm_legacy=$$(./gen_all_srgs \
 		< tests/symplectic-sp6-2.matrix | cksum); \

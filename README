@@ -74,6 +74,7 @@ Usage: graphswitching [OPTION]...
   -m METHOD, --method=METHOD
   -n N, --vertices=N
   -p P, --part-size=P
+  --sym
   -i FILE, --input=FILE
   -o FILE, --output=FILE
   -h, --help
@@ -91,6 +92,23 @@ For example, explicitly request WQH switching with parts of size 3:
 graphswitching --method wqh --part-size 3 \
     --input adjacency-matrix.txt --output switched-matrices.txt
 ```
+
+For highly symmetric inputs, a build with nauty support can search
+representatives of the WQH partition orbits:
+
+```sh
+graphswitching --method wqh --part-size 4 --sym \
+    --input adjacency-matrix.txt --output switched-matrices.txt
+```
+
+This mode computes `Aut(G)` with nauty. It keeps one `C1` subset from each
+orbit, then one `C2` subset from each orbit under the setwise stabilizer of
+`C1`. If a partition is omitted, switching it would produce a graph
+isomorphic to one produced from a retained partition. The mode therefore
+preserves the set of output isomorphism classes, but not raw output
+multiplicity or ordering. Different partition orbits can still happen to
+produce isomorphic graphs; use canonical labelling when exactly one graph
+per isomorphism class is required.
 
 WQH switching with parts of size `2,2,n-4` corresponds to four-vertex GM
 switching. The default uses the dedicated enumeration from `gen_all_srgs`,
@@ -114,7 +132,9 @@ n=<number of vertices>
 
 It is followed by the adjacency matrices found by one switching step, with
 a blank line after each matrix. The search can produce isomorphic graphs;
-the programs do not remove duplicates up to isomorphism.
+the programs do not remove duplicates up to isomorphism. The
+`--sym` removes duplicates caused by automorphic switching
+partitions, but it is not a general graph-isomorphism filter.
 
 The matrix output is compatible with the adjacency-matrix tools from
 [nauty and Traces](https://pallini.di.uniroma1.it/). For example, when the
@@ -127,8 +147,11 @@ prefixed gtools names are installed:
     | LC_ALL=C sort -u > switched.g6
 ```
 
-nauty and Traces are optional and are not needed to build or run the
-switching programs themselves.
+nauty and Traces are optional. During `make`, the build checks whether the
+nauty headers and library are available. If they are, `graphswitching` gains
+`--sym` support; otherwise the same program is built without that feature
+and reports a clear error if `--sym` is requested. See `INSTALL` for
+configuration examples.
 
 ## Project layout
 
@@ -173,6 +196,11 @@ make clean
 make CFLAGS="-O2"
 ```
 
+On graphs with a large automorphism group, `--sym` can reduce both
+the candidate search and output by orders of magnitude. Computing nauty
+groups and set stabilizers has overhead, so the ordinary enumerator can
+still be faster for asymmetric graphs or very small searches.
+
 ## Benchmarks
 
 The `benchmarks/` directory contains reproducible end-to-end benchmarks.
@@ -192,6 +220,18 @@ Run the larger tuple-enumeration cases or repeat selected cases:
 ```sh
 make benchmark BENCHMARK_SUITE=full BENCHMARK_RUNS=3
 make benchmark BENCHMARK_CASES="sp6-wqh-p2 paley73-wqh-p3"
+```
+
+The very slow legacy Sp(4,4) case is only included in `extrafull`:
+
+```sh
+make benchmark BENCHMARK_SUITE=extrafull
+```
+
+With nauty support detected, run the orbit-representative suite with:
+
+```sh
+make benchmark BENCHMARK_SUITE=symmetry
 ```
 
 The runner automatically recognizes both the unprefixed nauty program names

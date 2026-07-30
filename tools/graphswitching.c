@@ -18,6 +18,10 @@ static int parse_positive_int(const char *text, int *value)
         char *end;
         long parsed;
 
+        if (text == NULL) {
+                return 0;
+        }
+
         errno = 0;
         end = NULL;
         parsed = strtol(text, &end, 10);
@@ -65,6 +69,11 @@ static void print_help(FILE *stream, const char *program)
                 "  -p P, --part-size=P   use WQH parts of P vertices "
                 "each (default: 2)\n");
         fprintf(stream,
+                "      --sym              use input-graph symmetries to "
+                "search WQH orbit representatives\n"
+                "                         (requires nauty support in this "
+                "build; changes output multiplicity/order)\n");
+        fprintf(stream,
                 "  -i FILE, --input=FILE read FILE instead of standard "
                 "input; '-' means stdin\n");
         fprintf(stream,
@@ -86,7 +95,11 @@ static void print_help(FILE *stream, const char *program)
                 "       --part-size is not valid with this method.\n");
         fprintf(stream,
                 "  wqh  WQH switching with partition sizes P,P,N-2P. "
-                "Requires 2P <= N.\n\n");
+                "Requires 2P <= N.\n"
+                "       --sym keeps one C1 orbit representative "
+                "and one C2 representative\n"
+                "       under its setwise stabilizer. Omitted results are "
+                "isomorphic to emitted ones.\n\n");
 
         fprintf(stream, "Input:\n");
         fprintf(stream,
@@ -99,7 +112,9 @@ static void print_help(FILE *stream, const char *program)
         fprintf(stream, "Output:\n");
         fprintf(stream,
                 "  An \"n=N\" line followed by every switched adjacency "
-                "matrix found.\n\n");
+                "matrix found.\n"
+                "  --sym preserves output isomorphism classes, "
+                "not raw multiplicity or order.\n\n");
 
         fprintf(stream, "Limits:\n");
         fprintf(stream, "  1 <= N <= %d; 1 <= WQH P <= %d.\n\n",
@@ -110,6 +125,9 @@ static void print_help(FILE *stream, const char *program)
         fprintf(stream, "  %s < graph.matrix\n", program);
         fprintf(stream,
                 "  %s --method wqh --part-size 4 --input graph.matrix\n\n",
+                program);
+        fprintf(stream,
+                "  %s --method wqh --part-size 4 --sym < graph.matrix\n\n",
                 program);
 
         fprintf(stream, "Exit status:\n");
@@ -196,6 +214,10 @@ static int parse_command_line(int argc, char *argv[],
                     strcmp(argument, "--version") == 0) {
                         printf("%s %s\n", program, GRAPHSWITCHING_VERSION);
                         return 1;
+                }
+                if (strcmp(argument, "--sym") == 0) {
+                        command->switching.use_symmetry = 1;
+                        continue;
                 }
 
                 matched = option_value(argc, argv, &index, "--method",
@@ -295,6 +317,14 @@ static int parse_command_line(int argc, char *argv[],
             command->part_size_was_set) {
                 fprintf(stderr,
                         "%s: --part-size is only valid with "
+                        "--method wqh\n",
+                        program);
+                return -1;
+        }
+        if (command->switching.method == GRAPHSWITCHING_METHOD_GM &&
+            command->switching.use_symmetry) {
+                fprintf(stderr,
+                        "%s: --sym is only valid with "
                         "--method wqh\n",
                         program);
                 return -1;

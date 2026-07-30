@@ -12,5 +12,9 @@ gq2-4-wqh-legacy-p5	full	gen_all_srgs_wqh_generic	27 5	tests/generalized-quadran
 gq2-4-wqh-p5	full	graphswitching	--method wqh --vertices 27 --part-size 5	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) WQH 5,5,n-10
 bil223-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	81 3	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) legacy WQH 3,3,n-6
 bil223-wqh-p3	full	graphswitching	--method wqh --vertices 81 --part-size 3	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) WQH 3,3,n-6
-sp4-4-wqh-legacy-p4	full	gen_all_srgs_wqh_generic	85 4	tests/symplectic-sp4-4.matrix	1	Sp(4,4) legacy WQH 4,4,n-8
+sp4-4-wqh-legacy-p4	extrafull	gen_all_srgs_wqh_generic	85 4	tests/symplectic-sp4-4.matrix	1	Very slow Sp(4,4) legacy WQH 4,4,n-8
 sp4-4-wqh-p4	full	graphswitching	--method wqh --vertices 85 --part-size 4	tests/symplectic-sp4-4.matrix	1	Sp(4,4) WQH 4,4,n-8
+sp6-wqh-sym-p2	symmetry	graphswitching	--method wqh --vertices 63 --part-size 2 --sym	tests/symplectic-sp6-2.matrix	2	Sp(6,2) partition-orbit representatives
+gq2-4-wqh-sym-p5	symmetry	graphswitching	--method wqh --vertices 27 --part-size 5 --sym	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) partition-orbit representatives
+bil223-wqh-sym-p3	symmetry	graphswitching	--method wqh --vertices 81 --part-size 3 --sym	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) partition-orbit representatives
+sp4-4-wqh-sym-p4	symmetry	graphswitching	--method wqh --vertices 85 --part-size 4 --sym	tests/symplectic-sp4-4.matrix	1	Sp(4,4) partition-orbit representatives

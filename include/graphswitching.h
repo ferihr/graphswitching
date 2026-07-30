@@ -20,9 +20,9 @@ extern "C" {
 #define GRAPHSWITCHING_MAX_PART_SIZE 8
 #define GRAPHSWITCHING_VERSION_MAJOR 0
 #define GRAPHSWITCHING_VERSION_MINOR 1
-#define GRAPHSWITCHING_VERSION_PATCH 2
+#define GRAPHSWITCHING_VERSION_PATCH 3
 #ifndef GRAPHSWITCHING_VERSION
-#define GRAPHSWITCHING_VERSION "0.1.2"
+#define GRAPHSWITCHING_VERSION "0.1.3"
 #endif
 
 enum graphswitching_method {
@@ -39,13 +39,20 @@ struct graphswitching_options {
         int vertex_count;
         /* Used only by WQH switching. */
         int part_size;
+        /*
+         * When nonzero, search one representative per automorphism orbit.
+         * This requires a build with GRAPHSWITCHING_WITH_NAUTY defined.
+         */
+        int use_symmetry;
 };
 
 enum graphswitching_result {
         GRAPHSWITCHING_SUCCESS = 0,
         GRAPHSWITCHING_INVALID_ARGUMENT,
         GRAPHSWITCHING_INPUT_ERROR,
-        GRAPHSWITCHING_OUTPUT_ERROR
+        GRAPHSWITCHING_OUTPUT_ERROR,
+        GRAPHSWITCHING_FEATURE_UNAVAILABLE,
+        GRAPHSWITCHING_MEMORY_ERROR
 };
 
 /* Initialize options for GM switching with automatic order detection. */
@@ -57,7 +64,9 @@ void graphswitching_options_init(struct graphswitching_options *options);
  * adjacency-matrix format.
  *
  * GM switching uses a four-vertex switching set. WQH switching uses two
- * parts of part_size vertices each.
+ * parts of part_size vertices each. With use_symmetry enabled, WQH
+ * output multiplicity and order can change, but every result omitted is
+ * isomorphic to a result produced from an orbit representative.
  */
 enum graphswitching_result graphswitching_generate_with_options(
         FILE *input,

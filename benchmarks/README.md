@@ -63,17 +63,36 @@ The `full` suite also includes:
 - WQH `3,3,n-6` on the bilinear forms graph `Bil(2,2,3)`, an
   `SRG(81,32,13,12)`. One switching step is expected to produce two
   isomorphism classes.
-- WQH `4,4,n-8` on `Sp(4,4)`, an `SRG(85,20,3,5)`. One switching step is
-  expected to produce one isomorphism class.
+- WQH `4,4,n-8` on `Sp(4,4)`, an `SRG(85,20,3,5)`, using the current
+  `graphswitching` implementation. One switching step is expected to produce
+  one isomorphism class.
 
-The latter two are run through both the legacy generic program and
-`graphswitching`. They are substantially longer-running cases than the
+Bil(2,2,3) is run through both the legacy generic program and
+`graphswitching`. The Sp(4,4) legacy case is excluded from `full` because it
+is especially slow (roughly 11 minutes in the reference environment).
+Select `extrafull` or name `sp4-4-wqh-legacy-p4` explicitly to include it.
+The current Sp(4,4) case is still substantially longer-running than the
 default quick suite.
 
 ```sh
 make benchmark BENCHMARK_SUITE=full
 make benchmark BENCHMARK_SUITE=full BENCHMARK_RUNS=3
+make benchmark BENCHMARK_SUITE=extrafull
 ```
+
+The separate `symmetry` suite uses `graphswitching --sym` on Sp(6,2) with
+`p=2`, Bil(2,2,3) with `p=3`, Sp(4,4) with `p=4`, and GQ(2,4) with `p=5`.
+Build with nauty support as described in `INSTALL`, then run:
+
+```sh
+make benchmark BENCHMARK_SUITE=symmetry
+make check-symmetry
+```
+
+These cases enumerate one representative per input-graph automorphism
+orbit, then use canonical labelling to verify that the expected output
+isomorphism classes are retained. They are excluded from `quick` and `full`
+so those suites continue to work without the nauty library.
 
 List the cases or run only named cases:
 
