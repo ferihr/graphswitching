@@ -9,6 +9,12 @@ generate_algebraic_fixtures.py independently reconstructs the named
 symplectic, bilinear forms, and generalized-quadrangle graphs and checks
 both their stored matrices and strongly regular parameters.
 
+test_graphswitching_explore.py checks graph6 decoding, adjacency-matrix
+conversion, automorphism bounds, canonical seed handling, per-round
+deduplication, graph limits, parallel worker pipelines, and optional
+automorphism-size filtering. It uses deterministic stand-in commands, so
+the default make check does not require nauty gtools.
+
 When graphswitching has nauty support and the nauty gtools are available,
 make check-symmetry checks --sym on Sp(6,2), GQ(2,4), Bil(2,2,3), and
 Sp(4,4). Each output is canonically labelled and required to contain the

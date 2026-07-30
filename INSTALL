@@ -8,6 +8,10 @@ To build Graph Switching you need:
   - make; and
   - standard C library headers.
 
+graphswitching-explore additionally requires Python 3, the nauty amtog and
+labelg programs, and the standard sort utility at run time. Its optional
+automorphism group size filters use dreadnaut.
+
 The install target also uses a POSIX-style install command. nauty and
 Traces are optional. They are useful for converting and canonically
 labelling generated graphs, and the nauty library enables --sym.
@@ -18,9 +22,10 @@ From the repository root, run:
 
     make
 
-This creates five executables in the repository root:
+This creates six executables in the repository root:
 
     graphswitching
+    graphswitching-explore
     gen_all_srgs
     gen_all_srgs_64vts
     gen_all_srgs_wqh6
@@ -75,7 +80,10 @@ To compile with a different compiler or optimization level:
 
 make check builds every executable, exercises the standard command-line
 options, compares the default GM method with gen_all_srgs, and compares the
-explicit WQH method with the original generic program.
+explicit WQH method with the original generic program. It also checks
+graphswitching-explore graph6 parsing, canonical round files, limits,
+parallel execution, and automorphism filtering with deterministic test
+programs.
 
 Install
 
@@ -119,6 +127,18 @@ Specify it explicitly or select WQH when desired:
 
     ./graphswitching --vertices 63 < adjacency-matrix.txt
     ./graphswitching --method wqh --part-size 3 < adjacency-matrix.txt
+
+Use graphswitching-explore for repeated rounds starting from graph6 files:
+
+    ./graphswitching-explore \
+        --method wqh --part-size 3 \
+        --output-dir switching-closure seeds.g6
+
+The directory must be new or empty. Run ./graphswitching-explore --help for
+parallelism, round, time, graph-count, symmetry, and automorphism-filter
+options. The program automatically recognizes amtog, labelg, and dreadnaut,
+as well as the nauty-prefixed names used by some packages. Explicit command
+paths and a common prefix can also be supplied.
 
 Run ./graphswitching --help for the complete interface. The tool supports
 n <= 448; WQH supports p <= 8. The original limits remain in
