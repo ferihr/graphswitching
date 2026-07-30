@@ -20,6 +20,7 @@ LEGACY_PROGRAMS := \
 	gen_all_srgs_wqh6 \
 	gen_all_srgs_wqh_generic
 PROGRAMS := graphswitching $(LEGACY_PROGRAMS)
+TEST_CASES := tests/cases.txt
 
 .PHONY: all check clean install uninstall
 
@@ -32,19 +33,28 @@ graphswitching: $(TOOL_SOURCE) $(LIBRARY_SOURCE) $(INCLUDE_DIR)/graphswitching.h
 	$(CC) $(CPPFLAGS) -I$(INCLUDE_DIR) $(CFLAGS) $(WARNFLAGS) \
 		$(TOOL_SOURCE) $(LIBRARY_SOURCE) $(LDFLAGS) $(LDLIBS) -o $@
 
-check: $(PROGRAMS)
+check: $(PROGRAMS) $(TEST_CASES)
 	@for program in $(PROGRAMS); do \
 		test -x "$$program" || exit 1; \
 	done
 	@set -eu; \
 	tmpdir=$$(mktemp -d ./.graphswitching-check.XXXXXX); \
 	trap 'rm -rf "$$tmpdir"' EXIT HUP INT TERM; \
-	./gen_all_srgs_wqh_generic 4 1 < tests/cycle4.matrix \
-		> "$$tmpdir/legacy.out"; \
-	./graphswitching 4 1 < tests/cycle4.matrix \
-		> "$$tmpdir/graphswitching.out"; \
-	cmp "$$tmpdir/legacy.out" "$$tmpdir/graphswitching.out"
-	@echo "All programs built and equivalent output verified."
+	while read -r name vertices part_size; do \
+		case "$$name" in \
+			""|\#*) continue ;; \
+		esac; \
+		printf "Checking %s (n=%s, p=%s)... " \
+			"$$name" "$$vertices" "$$part_size"; \
+		./gen_all_srgs_wqh_generic "$$vertices" "$$part_size" \
+			< "tests/$$name.matrix" > "$$tmpdir/$$name.legacy"; \
+		./graphswitching "$$vertices" "$$part_size" \
+			< "tests/$$name.matrix" > "$$tmpdir/$$name.graphswitching"; \
+		cmp "$$tmpdir/$$name.legacy" \
+			"$$tmpdir/$$name.graphswitching"; \
+		echo "ok"; \
+	done < $(TEST_CASES)
+	@echo "All programs built and all equivalent-output checks passed."
 
 install: $(PROGRAMS)
 	$(INSTALL) -d "$(DESTDIR)$(BINDIR)"
