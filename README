@@ -1,0 +1,119 @@
+# Graph Switching
+
+Graph Switching is a collection of small C programs for enumerating graphs
+obtained by applying Godsil--McKay (GM) or Wang--Qiu--Hu (WQH) switching once
+to a regular graph. The programs were written for experiments with strongly
+regular graphs.
+
+## Programs
+
+| Program | Switching operation | Configuration |
+| --- | --- | --- |
+| `gen_all_srgs` | GM with parts of size `4,n-4` | Set `VTS` in the source |
+| `gen_all_srgs_64vts` | Bit-packed GM with parts of size `4,n-4` | Set `VTS`; limited by the width of `INTT` |
+| `gen_all_srgs_wqh6` | WQH with parts of size `3,3,n-6` | Set `VTS` in the source |
+| `gen_all_srgs_wqh_generic` | WQH with parts of size `p,p,n-2p` | Pass `n` and `p` at run time |
+
+The generic WQH program defaults to a maximum of 448 vertices and a maximum
+part size of 8. These limits can be changed by adjusting the constants near
+the top of `code/gen_all_srgs_wqh_generic.c`.
+
+## Quick start
+
+Build all four programs:
+
+```sh
+make
+```
+
+Run the generic WQH program on a 16-vertex adjacency matrix with parts of
+size 2:
+
+```sh
+./gen_all_srgs_wqh_generic 16 2 < adjacency-matrix.txt \
+    > switched-matrices.txt
+```
+
+See `INSTALL` for compiler requirements, installation options, and details
+about configuring the specialized programs.
+
+## Input
+
+Each program reads an adjacency matrix from standard input. It consumes
+exactly `n * n` occurrences of `0` or `1`; all other characters, including
+spaces and newlines, are ignored. For example, a matrix may be written with
+one row per line.
+
+The programs expect an adjacency matrix for a regular, simple, undirected
+graph. They do not comprehensively validate those properties.
+
+For the three specialized programs, `n` is the compile-time `VTS` value in
+the corresponding source file. For `gen_all_srgs_wqh_generic`, `n` is the
+first command-line argument and `p` is the second:
+
+```text
+gen_all_srgs_wqh_generic n p
+```
+
+## Output
+
+Output is written to standard output. The first line is:
+
+```text
+n=<number of vertices>
+```
+
+It is followed by the adjacency matrices found by one switching step, with
+a blank line after each matrix. The search can produce isomorphic graphs;
+the programs do not remove duplicates up to isomorphism.
+
+The matrix output is compatible with the adjacency-matrix tools from
+[nauty and Traces](https://pallini.di.uniroma1.it/). For example, when the
+prefixed gtools names are installed:
+
+```sh
+./gen_all_srgs_wqh_generic 16 2 < adjacency-matrix.txt \
+    | nauty-amtog -q \
+    | nauty-labelg -gqt \
+    | LC_ALL=C sort -u > switched.g6
+```
+
+nauty and Traces are optional and are not needed to build or run the
+switching programs themselves.
+
+## Specialized builds
+
+The specialized source files hard-code the graph order. Edit the relevant
+`#define VTS` and rebuild that target:
+
+```sh
+make clean
+make gen_all_srgs
+```
+
+`gen_all_srgs_64vts` stores each adjacency row in one `INTT`; consequently,
+`VTS` must not exceed the number of bits in that type. See the comments in
+`code/gen_all_srgs_64vts.c` before changing `VTS` or `INTT`.
+
+## Performance
+
+The programs enumerate candidate switching sets combinatorially, so running
+time and output size can grow quickly with the number of vertices and the
+part size. The default build uses optimization and loop-unrolling flags.
+Override them when needed, for example:
+
+```sh
+make clean
+make CFLAGS="-O2"
+```
+
+## Background
+
+Examples, data sets, and more context about the strongly regular graph
+computations are available on
+[Ferdinand Ihringer's SRG page](https://ihringer.org/srgs.php).
+
+## License
+
+This project is licensed under the GNU General Public License, version 3.
+See `LICENSE`.
