@@ -3,8 +3,10 @@
  * Generic Godsil--McKay and Wang--Qiu--Hu graph switching.
  *
  * The GM implementation follows code/gen_all_srgs.c. The WQH implementation
- * retains the algorithm of code/gen_all_srgs_wqh_generic.c. Both use the
- * same dynamic-order bit-packed matrix and buffered row output.
+ * retains the algorithm of code/gen_all_srgs_wqh_generic.c, with cached C1
+ * signatures, incremental degree state, and specialized bitset enumeration
+ * for part sizes 3 through 5. Both use the same dynamic-order bit-packed
+ * matrix and buffered row output.
  */
 
 #include "graphswitching.h"
@@ -38,6 +40,11 @@ struct search_context {
         int vertex_count;
         int part_size;
         word_t adjacency[GRAPHSWITCHING_MAX_VERTICES * BLOCK_COUNT];
+        word_t c1_signatures[GRAPHSWITCHING_MAX_VERTICES];
+        unsigned char c1_cross_degrees[GRAPHSWITCHING_MAX_VERTICES];
+        int c1_degrees[GRAPHSWITCHING_MAX_PART_SIZE];
+        int c2_degrees[GRAPHSWITCHING_MAX_PART_SIZE];
+        int c1_to_c2_degrees[GRAPHSWITCHING_MAX_PART_SIZE];
         struct partition_vertex
                 partition[2 * GRAPHSWITCHING_MAX_PART_SIZE];
         FILE *output;
@@ -62,18 +69,23 @@ static enum graphswitching_result choose_partition(
         struct search_context *context, int current);
 static enum graphswitching_result apply_partition_global(
         struct search_context *context);
+static void cache_c1_signatures(struct search_context *context);
+static void add_partition_vertex(struct search_context *context, int current);
+static void remove_partition_vertex(struct search_context *context,
+                                    int current);
+static int build_specialized_candidate_mask(
+        const struct search_context *context, int current, word_t mask[]);
+static void intersect_with_neighbourhood(
+        const struct search_context *context, word_t mask[], int vertex,
+        int adjacent);
+static void add_adjacency_pattern(
+        const struct search_context *context, word_t destination[],
+        int first_partition_index, int count, unsigned int pattern);
+static int next_mask_vertex(const word_t mask[], int start, int limit);
 static int test_regular_11(const struct search_context *context, int current);
 static int test_regular_12(const struct search_context *context, int current);
 static int test_regular_21(const struct search_context *context, int current);
 static int test_regular_22(const struct search_context *context, int current);
-static void get_degrees_11(const struct search_context *context, int current,
-                           int degrees[]);
-static void get_degrees_12(const struct search_context *context, int current,
-                           int degrees[]);
-static void get_degrees_21(const struct search_context *context, int current,
-                           int degrees[]);
-static void get_degrees_22(const struct search_context *context, int current,
-                           int degrees[]);
 static enum graphswitching_result read_adjacency_matrix(
         struct search_context *context, FILE *input, int requested_vertices);
 static int parse_order_header(const char *line, int *vertex_count);
@@ -569,10 +581,16 @@ static enum graphswitching_result choose_partition(
 {
         int start = 0;
         int part_size = context->part_size;
+        word_t candidate_mask[BLOCK_COUNT];
+        int use_candidate_mask;
         struct partition_vertex *selected = &context->partition[current];
 
         if (current == 2 * part_size) {
                 return apply_partition_global(context);
+        }
+
+        if (current == part_size) {
+                cache_c1_signatures(context);
         }
 
         if (current > 0) {
@@ -582,35 +600,59 @@ static enum graphswitching_result choose_partition(
                 }
         }
 
-        for (selected->vertex = start;
+        use_candidate_mask = build_specialized_candidate_mask(
+                context, current, candidate_mask);
+        for (selected->vertex =
+                     use_candidate_mask
+                             ? next_mask_vertex(candidate_mask, start,
+                                                context->vertex_count)
+                             : start;
              selected->vertex < context->vertex_count;
-             ++selected->vertex) {
+             selected->vertex =
+                     use_candidate_mask
+                             ? next_mask_vertex(candidate_mask,
+                                                selected->vertex + 1,
+                                                context->vertex_count)
+                             : selected->vertex + 1) {
                 enum graphswitching_result result;
+                int valid = 1;
 
                 if (partition_contains(context->partition, current - 1,
                                        selected->vertex)) {
+                        continue;
+                }
+                if (part_size > 0 && current > part_size &&
+                    context->c1_cross_degrees[selected->vertex] !=
+                            context->c1_cross_degrees[
+                                    context->partition[part_size].vertex]) {
                         continue;
                 }
 
                 selected->row_offset = selected->vertex * BLOCK_COUNT;
                 selected->word_index = selected->vertex >> BLOCK_SHIFT;
                 selected->bit_index = selected->vertex & BLOCK_MASK;
+                add_partition_vertex(context, current);
 
                 if (current <= part_size / 2 || current == part_size) {
                         /* There is not enough information to prune yet. */
                 } else if (current < part_size) {
                         if (!test_regular_11(context, current)) {
-                                continue;
+                                valid = 0;
                         }
                 } else {
                         if (!test_regular_21(context, current) ||
                             !test_regular_12(context, current) ||
                             !test_regular_22(context, current)) {
-                                continue;
+                                valid = 0;
                         }
                 }
 
-                result = choose_partition(context, current + 1);
+                if (valid) {
+                        result = choose_partition(context, current + 1);
+                } else {
+                        result = GRAPHSWITCHING_SUCCESS;
+                }
+                remove_partition_vertex(context, current);
                 if (result != GRAPHSWITCHING_SUCCESS) {
                         return result;
                 }
@@ -619,22 +661,271 @@ static enum graphswitching_result choose_partition(
         return GRAPHSWITCHING_SUCCESS;
 }
 
+static void cache_c1_signatures(struct search_context *context)
+{
+        int vertex;
+
+        for (vertex = 0; vertex < context->vertex_count; ++vertex) {
+                word_t signature = 0;
+                int degree = 0;
+                int index;
+
+                for (index = 0; index < context->part_size; ++index) {
+                        if (adjacency_bit(
+                                    context, vertex,
+                                    context->partition[index].vertex)) {
+                                signature |= UINT32_C(1) << index;
+                                ++degree;
+                        }
+                }
+
+                context->c1_signatures[vertex] = signature;
+                context->c1_cross_degrees[vertex] =
+                        (unsigned char)degree;
+        }
+}
+
+static void add_partition_vertex(struct search_context *context, int current)
+{
+        int part_size = context->part_size;
+        int index;
+        word_t signature;
+
+        if (current < part_size) {
+                context->c1_degrees[current] = 0;
+                for (index = 0; index < current; ++index) {
+                        int adjacent = adjacency_bit(
+                                context,
+                                context->partition[current].vertex,
+                                context->partition[index].vertex);
+
+                        context->c1_degrees[current] += adjacent;
+                        context->c1_degrees[index] += adjacent;
+                }
+                return;
+        }
+
+        current -= part_size;
+        context->c2_degrees[current] = 0;
+        signature = context->c1_signatures[
+                context->partition[current + part_size].vertex];
+        for (index = 0; index < part_size; ++index) {
+                context->c1_to_c2_degrees[index] +=
+                        (int)((signature >> index) & UINT32_C(1));
+        }
+        for (index = 0; index < current; ++index) {
+                int adjacent = adjacency_bit(
+                        context,
+                        context->partition[current + part_size].vertex,
+                        context->partition[index + part_size].vertex);
+
+                context->c2_degrees[current] += adjacent;
+                context->c2_degrees[index] += adjacent;
+        }
+}
+
+static void remove_partition_vertex(struct search_context *context,
+                                    int current)
+{
+        int part_size = context->part_size;
+        int index;
+        word_t signature;
+
+        if (current < part_size) {
+                for (index = 0; index < current; ++index) {
+                        int adjacent = adjacency_bit(
+                                context,
+                                context->partition[current].vertex,
+                                context->partition[index].vertex);
+
+                        context->c1_degrees[index] -= adjacent;
+                }
+                return;
+        }
+
+        current -= part_size;
+        signature = context->c1_signatures[
+                context->partition[current + part_size].vertex];
+        for (index = 0; index < part_size; ++index) {
+                context->c1_to_c2_degrees[index] -=
+                        (int)((signature >> index) & UINT32_C(1));
+        }
+        for (index = 0; index < current; ++index) {
+                int adjacent = adjacency_bit(
+                        context,
+                        context->partition[current + part_size].vertex,
+                        context->partition[index + part_size].vertex);
+
+                context->c2_degrees[index] -= adjacent;
+        }
+}
+
+static int build_specialized_candidate_mask(
+        const struct search_context *context, int current, word_t mask[])
+{
+        int part_size = context->part_size;
+        int word_index;
+
+        if (part_size < 3 || part_size > 5) {
+                return 0;
+        }
+
+        for (word_index = 0; word_index < BLOCK_COUNT; ++word_index) {
+                mask[word_index] = UINT32_MAX;
+        }
+
+        if (current == part_size - 1) {
+                word_t allowed[BLOCK_COUNT] = {0};
+                int selected_count = part_size - 1;
+                unsigned int pattern;
+
+                for (pattern = 0;
+                     pattern < (UINT32_C(1) << selected_count);
+                     ++pattern) {
+                        int required_degree = 0;
+                        int valid = 1;
+                        int index;
+
+                        for (index = 0; index < selected_count; ++index) {
+                                required_degree +=
+                                        (int)((pattern >> index) & 1U);
+                        }
+                        for (index = 0; index < selected_count; ++index) {
+                                int adjacent =
+                                        (int)((pattern >> index) & 1U);
+
+                                if (context->c1_degrees[index] + adjacent !=
+                                    required_degree) {
+                                        valid = 0;
+                                        break;
+                                }
+                        }
+                        if (valid) {
+                                add_adjacency_pattern(
+                                        context, allowed, 0, selected_count,
+                                        pattern);
+                        }
+                }
+
+                memcpy(mask, allowed, sizeof(allowed));
+                return 1;
+        }
+
+        if (current > part_size && current < 2 * part_size) {
+                word_t allowed[BLOCK_COUNT] = {0};
+                int selected_count = current - part_size;
+                int required_degree = context->c1_degrees[0];
+                unsigned int pattern;
+
+                for (pattern = 0;
+                     pattern < (UINT32_C(1) << selected_count);
+                     ++pattern) {
+                        int remaining = part_size - selected_count - 1;
+                        int candidate_degree = 0;
+                        int valid = 1;
+                        int index;
+
+                        for (index = 0; index < selected_count; ++index) {
+                                int adjacent =
+                                        (int)((pattern >> index) & 1U);
+                                int degree =
+                                        context->c2_degrees[index] +
+                                        adjacent;
+
+                                candidate_degree += adjacent;
+                                if (degree > required_degree ||
+                                    degree + remaining < required_degree) {
+                                        valid = 0;
+                                        break;
+                                }
+                        }
+                        if (!valid ||
+                            candidate_degree > required_degree ||
+                            candidate_degree + remaining <
+                                    required_degree) {
+                                continue;
+                        }
+
+                        add_adjacency_pattern(
+                                context, allowed, part_size,
+                                selected_count, pattern);
+                }
+
+                memcpy(mask, allowed, sizeof(allowed));
+                return 1;
+        }
+
+        return 0;
+}
+
+static void intersect_with_neighbourhood(
+        const struct search_context *context, word_t mask[], int vertex,
+        int adjacent)
+{
+        int row_offset = vertex * BLOCK_COUNT;
+        int word_index;
+
+        for (word_index = 0; word_index < BLOCK_COUNT; ++word_index) {
+                word_t neighbours =
+                        context->adjacency[row_offset + word_index];
+
+                mask[word_index] &=
+                        adjacent ? neighbours : ~neighbours;
+        }
+}
+
+static void add_adjacency_pattern(
+        const struct search_context *context, word_t destination[],
+        int first_partition_index, int count, unsigned int pattern)
+{
+        word_t matching[BLOCK_COUNT];
+        int index;
+        int word_index;
+
+        for (word_index = 0; word_index < BLOCK_COUNT; ++word_index) {
+                matching[word_index] = UINT32_MAX;
+        }
+        for (index = 0; index < count; ++index) {
+                intersect_with_neighbourhood(
+                        context, matching,
+                        context->partition[
+                                first_partition_index + index].vertex,
+                        (int)((pattern >> index) & 1U));
+        }
+        for (word_index = 0; word_index < BLOCK_COUNT; ++word_index) {
+                destination[word_index] |= matching[word_index];
+        }
+}
+
+static int next_mask_vertex(const word_t mask[], int start, int limit)
+{
+        int vertex;
+
+        for (vertex = start; vertex < limit; ++vertex) {
+                if (((mask[vertex >> BLOCK_SHIFT] >>
+                      (vertex & BLOCK_MASK)) &
+                     UINT32_C(1)) != 0) {
+                        return vertex;
+                }
+        }
+
+        return limit;
+}
+
 static int test_regular_11(const struct search_context *context, int current)
 {
-        int degrees[GRAPHSWITCHING_MAX_PART_SIZE] = {0};
         int minimum;
         int maximum;
         int index;
 
-        get_degrees_11(context, current, degrees);
-        minimum = degrees[0];
-        maximum = degrees[0];
+        minimum = context->c1_degrees[0];
+        maximum = context->c1_degrees[0];
 
         for (index = 1; index <= current; ++index) {
-                if (degrees[index] < minimum) {
-                        minimum = degrees[index];
-                } else if (degrees[index] > maximum) {
-                        maximum = degrees[index];
+                if (context->c1_degrees[index] < minimum) {
+                        minimum = context->c1_degrees[index];
+                } else if (context->c1_degrees[index] > maximum) {
+                        maximum = context->c1_degrees[index];
                 }
 
                 if (maximum - minimum >
@@ -648,18 +939,15 @@ static int test_regular_11(const struct search_context *context, int current)
 
 static int test_regular_22(const struct search_context *context, int current)
 {
-        int required[GRAPHSWITCHING_MAX_PART_SIZE] = {0};
-        int degrees[GRAPHSWITCHING_MAX_PART_SIZE] = {0};
         int part_size = context->part_size;
         int index;
 
-        get_degrees_11(context, part_size - 1, required);
-        get_degrees_22(context, current, degrees);
-
         for (index = 0; index <= current - part_size; ++index) {
-                if (required[0] < degrees[index] ||
-                    required[0] >
-                            degrees[index] + 2 * part_size - current - 1) {
+                if (context->c1_degrees[0] <
+                            context->c2_degrees[index] ||
+                    context->c1_degrees[0] >
+                            context->c2_degrees[index] +
+                                    2 * part_size - current - 1) {
                         return 0;
                 }
         }
@@ -669,21 +957,19 @@ static int test_regular_22(const struct search_context *context, int current)
 
 static int test_regular_12(const struct search_context *context, int current)
 {
-        int degrees[GRAPHSWITCHING_MAX_PART_SIZE] = {0};
         int minimum;
         int maximum;
         int part_size = context->part_size;
         int index;
 
-        get_degrees_12(context, current, degrees);
-        minimum = degrees[0];
-        maximum = degrees[0];
+        minimum = context->c1_to_c2_degrees[0];
+        maximum = context->c1_to_c2_degrees[0];
 
         for (index = 1; index < part_size; ++index) {
-                if (degrees[index] < minimum) {
-                        minimum = degrees[index];
-                } else if (degrees[index] > maximum) {
-                        maximum = degrees[index];
+                if (context->c1_to_c2_degrees[index] < minimum) {
+                        minimum = context->c1_to_c2_degrees[index];
+                } else if (context->c1_to_c2_degrees[index] > maximum) {
+                        maximum = context->c1_to_c2_degrees[index];
                 }
 
                 if (maximum - minimum >
@@ -697,101 +983,13 @@ static int test_regular_12(const struct search_context *context, int current)
 
 static int test_regular_21(const struct search_context *context, int current)
 {
-        int degrees[GRAPHSWITCHING_MAX_PART_SIZE] = {0};
-        int index;
-
-        get_degrees_21(context, current, degrees);
-
-        for (index = 1; index <= current - context->part_size; ++index) {
-                if (degrees[index] != degrees[index - 1]) {
-                        return 0;
-                }
-        }
-
-        return 1;
-}
-
-static void get_degrees_11(const struct search_context *context, int current,
-                           int degrees[])
-{
         int part_size = context->part_size;
-        int row_index;
+        int selected = current - part_size;
 
-        for (row_index = 0;
-             row_index <= current && row_index < part_size;
-             ++row_index) {
-                int column_index;
-
-                degrees[row_index] = 0;
-                for (column_index = 0;
-                     column_index <= current && column_index < part_size;
-                     ++column_index) {
-                        degrees[row_index] += adjacency_bit(
-                                context,
-                                context->partition[row_index].vertex,
-                                context->partition[column_index].vertex);
-                }
-        }
-}
-
-static void get_degrees_22(const struct search_context *context, int current,
-                           int degrees[])
-{
-        int part_size = context->part_size;
-        int row_index;
-
-        for (row_index = part_size; row_index <= current; ++row_index) {
-                int column_index;
-
-                degrees[row_index - part_size] = 0;
-                for (column_index = part_size; column_index <= current;
-                     ++column_index) {
-                        degrees[row_index - part_size] += adjacency_bit(
-                                context,
-                                context->partition[row_index].vertex,
-                                context->partition[column_index].vertex);
-                }
-        }
-}
-
-static void get_degrees_12(const struct search_context *context, int current,
-                           int degrees[])
-{
-        int part_size = context->part_size;
-        int row_index;
-
-        for (row_index = 0; row_index < part_size; ++row_index) {
-                int column_index;
-
-                degrees[row_index] = 0;
-                for (column_index = part_size; column_index <= current;
-                     ++column_index) {
-                        degrees[row_index] += adjacency_bit(
-                                context,
-                                context->partition[row_index].vertex,
-                                context->partition[column_index].vertex);
-                }
-        }
-}
-
-static void get_degrees_21(const struct search_context *context, int current,
-                           int degrees[])
-{
-        int part_size = context->part_size;
-        int row_index;
-
-        for (row_index = part_size; row_index <= current; ++row_index) {
-                int column_index;
-
-                degrees[row_index - part_size] = 0;
-                for (column_index = 0; column_index < part_size;
-                     ++column_index) {
-                        degrees[row_index - part_size] += adjacency_bit(
-                                context,
-                                context->partition[row_index].vertex,
-                                context->partition[column_index].vertex);
-                }
-        }
+        return context->c1_cross_degrees[
+                       context->partition[selected + part_size].vertex] ==
+               context->c1_cross_degrees[
+                       context->partition[part_size].vertex];
 }
 
 static enum graphswitching_result apply_partition_global(
@@ -810,12 +1008,10 @@ static enum graphswitching_result apply_partition_global(
                         continue;
                 }
 
-                neighbour_counts[2 * vertex] = 0;
+                neighbour_counts[2 * vertex] =
+                        context->c1_cross_degrees[vertex];
                 neighbour_counts[2 * vertex + 1] = 0;
                 for (index = 0; index < part_size; ++index) {
-                        neighbour_counts[2 * vertex] += adjacency_bit(
-                                context, vertex,
-                                context->partition[index].vertex);
                         neighbour_counts[2 * vertex + 1] += adjacency_bit(
                                 context, vertex,
                                 context->partition[index + part_size].vertex);
