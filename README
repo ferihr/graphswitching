@@ -13,6 +13,7 @@ Programs
   Program                    Switching operation                      Configuration
   -------------------------- ---------------------------------------- ----------------------------------------
   graphswitching             GM by default; WQH when requested        Runtime options; recommended interface
+  graphswitching-explore     Repeated GM or WQH rounds                graph6 input; parallel runtime options
   gen_all_srgs               GM with parts of size 4,n-4              Set VTS in the source
   gen_all_srgs_64vts         Bit-packed GM with parts of size 4,n-4   Set VTS; limited by the width of INTT
   gen_all_srgs_wqh6          WQH with parts of size 3,3,n-6           Set VTS in the source
@@ -23,7 +24,7 @@ part size of 8.
 
 Quick start
 
-Build all five programs:
+Build all six programs:
 
     make
 
@@ -135,12 +136,88 @@ nauty headers and library are available. If they are, graphswitching gains
 and reports a clear error if --sym is requested. See INSTALL for
 configuration examples.
 
+Iterated graph6 exploration
+
+graphswitching-explore repeatedly applies graphswitching to a frontier of
+graph6 graphs. It canonically labels every result with nauty, discards every
+isomorphism class seen in the seeds or an earlier round, and uses the new
+classes as the next frontier.
+
+Supply one or more graph6 files and an empty output directory. This example
+runs WQH switching with part size 3 on at most eight graphs at once:
+
+    graphswitching-explore \
+        --method wqh --part-size 3 \
+        --jobs 8 --rounds 5 \
+        --output-dir switching-closure \
+        seeds.g6 more-seeds.g6
+
+Use - as an input file, or supply no input file, to read graph6 records from
+standard input. graph6 headers and blank lines are accepted. Isomorphic seed
+graphs are reduced to one canonical representative before the first round.
+
+The output directory must be new or empty. The program creates:
+
+    initial.g6
+        Canonical, pairwise nonisomorphic seeds.
+
+    round-0001.g6, round-0002.g6, ...
+        Classes first discovered in that round. No graph in one of these
+        files is isomorphic to a graph in an earlier file.
+
+    all.g6
+        The accumulated union of initial.g6 and every completed round file.
+
+The default is ten rounds and one parallel worker per available CPU.
+--processes is an alias for --jobs. There is no default wall-clock or
+graph-count limit. Add either or both limits; the first reached limit stops
+the run:
+
+    graphswitching-explore \
+        --rounds 20 --time-limit 3600 --max-graphs 100000 \
+        --output-dir switching-closure seeds.g6
+
+A run also stops early when a round finds no new class. The graph limit
+counts the canonical seeds and all retained new classes. If a time limit is
+reached during a round, completed worker results are saved and active
+graphswitching processes are terminated.
+
+Newly generated classes can be restricted by automorphism group size:
+
+    graphswitching-explore \
+        --aut-size 4 \
+        --output-dir aut-4 seeds.g6
+
+    graphswitching-explore \
+        --min-aut-size 4 --max-aut-size 128 \
+        --output-dir aut-4-to-128 seeds.g6
+
+The supplied seeds are always retained and form the first frontier; the
+filter applies to newly generated classes. This invariant is computed with
+dreadnaut. The equality option cannot be combined with the lower or upper
+bound options.
+
+graphswitching-explore requires Python 3, amtog, labelg, and the standard
+sort utility. Automorphism filtering additionally requires dreadnaut. It
+recognizes both unprefixed and nauty-prefixed gtools names. The AMTOG,
+LABELG, DREADNAUT, GRAPHSWITCHING, and SORT environment variables, or the
+corresponding command-line options, select nonstandard installations. Use
+--nauty-prefix to choose a common command prefix.
+
+Pass --sym together with --method wqh to use graphswitching's
+automorphism-orbit search inside every step. This is independent of the
+automorphism group size filter: --sym reduces switching partitions, while
+the filter decides which newly generated graph classes enter the next
+round.
+
 Project layout
 
 -   include/graphswitching.h contains the public C interface.
 -   src/graphswitching.c contains the reusable GM and WQH implementations.
 -   tools/graphswitching.c contains the command-line interface and its
     buffered output setup.
+-   tools/graphswitching_explore.py contains the parallel graph6 exploration
+    driver.
 -   code/ contains the unchanged original standalone programs.
 -   tests/ contains regular-graph inputs used to compare the new tool with
     the original, plus a generator/validator for the algebraic fixtures.

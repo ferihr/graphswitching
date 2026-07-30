@@ -58,12 +58,13 @@ SOURCE_DIR := code
 INCLUDE_DIR := include
 LIBRARY_SOURCE := src/graphswitching.c
 TOOL_SOURCE := tools/graphswitching.c
+EXPLORE_SOURCE := tools/graphswitching_explore.py
 LEGACY_PROGRAMS := \
 	gen_all_srgs \
 	gen_all_srgs_64vts \
 	gen_all_srgs_wqh6 \
 	gen_all_srgs_wqh_generic
-PROGRAMS := graphswitching $(LEGACY_PROGRAMS)
+PROGRAMS := graphswitching graphswitching-explore $(LEGACY_PROGRAMS)
 TEST_CASES := tests/cases.txt
 BENCHMARK_PROGRAMS := \
 	graphswitching \
@@ -86,6 +87,10 @@ graphswitching: FORCE $(TOOL_SOURCE) $(LIBRARY_SOURCE) \
 		$(TOOL_SOURCE) $(LIBRARY_SOURCE) $(LDFLAGS) \
 		$(LDLIBS) $(GRAPHSWITCHING_LDLIBS) -o $@
 
+graphswitching-explore: $(EXPLORE_SOURCE) $(VERSION_FILE)
+	sed 's/@GRAPHSWITCHING_VERSION@/$(PROJECT_VERSION)/g' $< > $@
+	chmod +x $@
+
 FORCE:
 
 benchmark: $(BENCHMARK_PROGRAMS)
@@ -107,6 +112,8 @@ check-symmetry: graphswitching
 
 check: $(PROGRAMS) $(TEST_CASES)
 	$(PYTHON) tests/generate_algebraic_fixtures.py
+	PYTHONDONTWRITEBYTECODE=1 \
+		$(PYTHON) tests/test_graphswitching_explore.py
 	@for program in $(PROGRAMS); do \
 		test -x "$$program" || exit 1; \
 	done
@@ -134,6 +141,14 @@ check: $(PROGRAMS) $(TEST_CASES)
 		--sym --help --version; do \
 		printf '%s\n' "$$help" | grep -q -- "$$option"; \
 	done; \
+	explore_help=$$(./graphswitching-explore --help); \
+	for option in --output-dir --jobs --processes --rounds --time-limit \
+		--max-graphs --method --part-size --sym --aut-size \
+		--min-aut-size --max-aut-size --help --version; do \
+		printf '%s\n' "$$explore_help" | grep -q -- "$$option"; \
+	done; \
+	test "$$(./graphswitching-explore --version)" = \
+		"graphswitching-explore $$(sed -n '1p' VERSION)"; \
 	printf '%s\n' "$$help" | grep -q -- 'P,P,N-2P'; \
 	printf '%s\n' "$$help" | grep -q -- '2P <= N'; \
 	printf '%s\n' "$$help" | grep -q -- 'Exit status:'; \
