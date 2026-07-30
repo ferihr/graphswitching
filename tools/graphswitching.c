@@ -49,35 +49,75 @@ static void print_help(FILE *stream, const char *program)
         fprintf(stream, "Usage: %s [OPTION]...\n", program);
         fprintf(stream,
                 "Enumerate graphs obtained by applying one switching "
-                "operation.\n\n");
+                "operation to one adjacency matrix.\n");
         fprintf(stream,
-                "  -m, --method=METHOD   switching method: gm (default) "
-                "or wqh\n");
+                "All options are optional; GM switching and standard "
+                "input/output are the defaults.\n\n");
+        fprintf(stream, "Options:\n");
         fprintf(stream,
-                "  -n, --vertices=N      number of vertices; inferred "
-                "when omitted\n");
+                "  -m METHOD, --method=METHOD\n"
+                "                         select gm (default) or wqh "
+                "switching\n");
         fprintf(stream,
-                "  -p, --part-size=P     WQH part size (default: 2)\n");
+                "  -n N, --vertices=N    use N vertices instead of "
+                "inferring the order\n");
         fprintf(stream,
-                "  -i, --input=FILE      read FILE instead of standard "
-                "input\n");
+                "  -p P, --part-size=P   use WQH parts of P vertices "
+                "each (default: 2)\n");
         fprintf(stream,
-                "  -o, --output=FILE     write FILE instead of standard "
-                "output\n");
+                "  -i FILE, --input=FILE read FILE instead of standard "
+                "input; '-' means stdin\n");
         fprintf(stream,
-                "  -h, --help            display this help and exit\n");
+                "  -o FILE, --output=FILE\n"
+                "                         write FILE instead of standard "
+                "output; '-' means stdout\n");
         fprintf(stream,
-                "  -V, --version         display version information and "
+                "  -h, --help             display this complete help and "
+                "exit\n");
+        fprintf(stream,
+                "  -V, --version          display version information and "
                 "exit\n\n");
+
+        fprintf(stream, "Switching methods:\n");
         fprintf(stream,
-                "FILE may be '-' for standard input or output. Automatic "
-                "order detection\n");
+                "  gm   Godsil--McKay switching with a four-vertex "
+                "switching set (default).\n");
         fprintf(stream,
-                "accepts a square adjacency matrix or a leading "
-                "\"n=<vertices>\" line.\n");
-        fprintf(stream, "Limits: N <= %d; WQH P <= %d.\n",
+                "       --part-size is not valid with this method.\n");
+        fprintf(stream,
+                "  wqh  WQH switching with partition sizes P,P,N-2P. "
+                "Requires 2P <= N.\n\n");
+
+        fprintf(stream, "Input:\n");
+        fprintf(stream,
+                "  A square 0/1 adjacency matrix, optionally preceded by "
+                "\"n=N\".\n");
+        fprintf(stream,
+                "  Whitespace is ignored. Without --vertices or an n=N "
+                "line, N is inferred.\n\n");
+
+        fprintf(stream, "Output:\n");
+        fprintf(stream,
+                "  An \"n=N\" line followed by every switched adjacency "
+                "matrix found.\n\n");
+
+        fprintf(stream, "Limits:\n");
+        fprintf(stream, "  1 <= N <= %d; 1 <= WQH P <= %d.\n\n",
                 GRAPHSWITCHING_MAX_VERTICES,
                 GRAPHSWITCHING_MAX_PART_SIZE);
+
+        fprintf(stream, "Examples:\n");
+        fprintf(stream, "  %s < graph.matrix\n", program);
+        fprintf(stream,
+                "  %s --method wqh --part-size 4 --input graph.matrix\n\n",
+                program);
+
+        fprintf(stream, "Exit status:\n");
+        fprintf(stream,
+                "  0  success\n"
+                "  1  invalid graph input, output failure, or switching "
+                "failure\n"
+                "  2  invalid command-line usage\n");
 }
 
 static void print_usage_hint(FILE *stream, const char *program)

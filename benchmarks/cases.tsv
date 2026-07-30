@@ -8,3 +8,7 @@ sp6-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	63 3	tests/symplectic-sp6-2.matr
 sp6-wqh-p3	full	graphswitching	--method wqh --vertices 63 --part-size 3	tests/symplectic-sp6-2.matrix	0	Sp(6,2) tuple enumeration
 paley73-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	73 3	tests/paley73.matrix	0	Larger legacy tuple-enumeration baseline
 paley73-wqh-p3	full	graphswitching	--method wqh --vertices 73 --part-size 3	tests/paley73.matrix	0	Larger graphswitching tuple enumeration
+bil223-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	81 3	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) legacy WQH 3,3,n-6
+bil223-wqh-p3	full	graphswitching	--method wqh --vertices 81 --part-size 3	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) WQH 3,3,n-6
+sp4-4-wqh-legacy-p4	full	gen_all_srgs_wqh_generic	85 4	tests/symplectic-sp4-4.matrix	1	Sp(4,4) legacy WQH 4,4,n-8
+sp4-4-wqh-p4	full	graphswitching	--method wqh --vertices 85 --part-size 4	tests/symplectic-sp4-4.matrix	1	Sp(4,4) WQH 4,4,n-8

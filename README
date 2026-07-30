@@ -71,14 +71,19 @@ matrix. It also accepts a leading `n=<number of vertices>` line. Use
 ```text
 Usage: graphswitching [OPTION]...
 
-  -m, --method=METHOD   switching method: gm (default) or wqh
-  -n, --vertices=N      number of vertices; inferred when omitted
-  -p, --part-size=P     WQH part size (default: 2)
-  -i, --input=FILE      read FILE instead of standard input
-  -o, --output=FILE     write FILE instead of standard output
-  -h, --help            display help
-  -V, --version         display the version
+  -m METHOD, --method=METHOD
+  -n N, --vertices=N
+  -p P, --part-size=P
+  -i FILE, --input=FILE
+  -o FILE, --output=FILE
+  -h, --help
+  -V, --version
 ```
+
+`--help` documents every option and accepted switching method, the defaults,
+input and output formats, limits, examples, and exit statuses. Both
+`--option=value` and `--option value` forms are accepted for options with
+values; short options accept both `-x value` and `-xvalue`.
 
 For example, explicitly request WQH switching with parts of size 3:
 
@@ -133,7 +138,7 @@ switching programs themselves.
   buffered output setup.
 - `code/` contains the unchanged original standalone programs.
 - `tests/` contains regular-graph inputs used to compare the new tool with
-  the original, including Petersen, Clebsch, Paley(73), and Sp(6,2) graphs.
+  the original, plus a generator/validator for the algebraic fixtures.
 - `benchmarks/` contains reproducible end-to-end timing cases.
 
 The command-line parsing and matrix output are kept separate from the search

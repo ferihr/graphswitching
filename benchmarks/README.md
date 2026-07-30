@@ -53,9 +53,19 @@ GM method in `graphswitching`, and both generic WQH implementations on
 Sp(6,2). This reproduces and extends the end-to-end benchmark in the project
 discussion.
 
-The `full` suite also uses `p=3` on Sp(6,2) and Paley(73). Those cases emit
-no switched matrices, so their running time is dominated by candidate-tuple
-enumeration instead of matrix conversion or canonical labeling.
+The `full` suite also includes:
+
+- `p=3` on Sp(6,2) and Paley(73). These emit no switched matrices, so their
+  running time is dominated by candidate-tuple enumeration.
+- WQH `3,3,n-6` on the bilinear forms graph `Bil(2,2,3)`, an
+  `SRG(81,32,13,12)`. One switching step is expected to produce two
+  isomorphism classes.
+- WQH `4,4,n-8` on `Sp(4,4)`, an `SRG(85,20,3,5)`. One switching step is
+  expected to produce one isomorphism class.
+
+The latter two are run through both the legacy generic program and
+`graphswitching`. They are substantially longer-running cases than the
+default quick suite.
 
 ```sh
 make benchmark BENCHMARK_SUITE=full
@@ -68,12 +78,14 @@ List the cases or run only named cases:
 python3 benchmarks/run.py --list
 make benchmark BENCHMARK_CASES="sp6-wqh-p2 paley73-wqh-p3"
 python3 benchmarks/run.py --runs 5 sp6-gm sp6-gm-packed
+python3 benchmarks/run.py bil223-wqh-p3 sp4-4-wqh-p4
 ```
 
 The case definitions live in `cases.tsv`. The `quick` suite currently
-expects two isomorphism classes from each Sp(6,2) benchmark. The full
-suite's `p=3` cases expect zero, matching their intentional
-tuple-enumeration-only role.
+expects two isomorphism classes from each Sp(6,2) benchmark. The
+tuple-enumeration-only `p=3` cases expect zero. The `Bil(2,2,3)` and
+`Sp(4,4)` counts agree with the one-step results reported in
+[Switching for small strongly regular graphs](https://ajc.maths.uq.edu.au/pdf/84/ajc_v84_p028.pdf).
 
 For useful comparisons, run benchmarks on an otherwise idle machine and
 record the compiler, `CFLAGS`, nauty version, CPU, and operating system.

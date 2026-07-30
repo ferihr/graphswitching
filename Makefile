@@ -54,6 +54,7 @@ benchmark: $(BENCHMARK_PROGRAMS)
 		--runs "$(BENCHMARK_RUNS)" $(BENCHMARK_CASES)
 
 check: $(PROGRAMS) $(TEST_CASES)
+	$(PYTHON) tests/generate_algebraic_fixtures.py
 	@for program in $(PROGRAMS); do \
 		test -x "$$program" || exit 1; \
 	done
@@ -76,7 +77,14 @@ check: $(PROGRAMS) $(TEST_CASES)
 	@set -eu; \
 	test "$$(./graphswitching --version)" = \
 		"graphswitching $$(sed -n '1p' VERSION)"; \
-	./graphswitching --help | grep -q -- '--method=METHOD'; \
+	help=$$(./graphswitching --help); \
+	for option in --method --vertices --part-size --input --output \
+		--help --version; do \
+		printf '%s\n' "$$help" | grep -q -- "$$option"; \
+	done; \
+	printf '%s\n' "$$help" | grep -q -- 'P,P,N-2P'; \
+	printf '%s\n' "$$help" | grep -q -- '2P <= N'; \
+	printf '%s\n' "$$help" | grep -q -- 'Exit status:'; \
 	gm_auto=$$(./graphswitching \
 		< tests/petersen.matrix | cksum); \
 	gm_explicit=$$(./graphswitching --method gm --vertices 10 \
