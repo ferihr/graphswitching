@@ -68,7 +68,10 @@ def parse_arguments() -> argparse.Namespace:
         "--suite",
         choices=("quick", "full"),
         default="quick",
-        help="quick runs Sp(6,2); full also runs the larger p=3 cases",
+        help=(
+            "quick runs Sp(6,2); full adds every extended WQH case, "
+            "including Bil(2,2,3) and Sp(4,4)"
+        ),
     )
     parser.add_argument(
         "--runs",
