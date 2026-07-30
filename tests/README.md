@@ -9,6 +9,13 @@ reporting. `generate_algebraic_fixtures.py` independently reconstructs the
 named symplectic, bilinear forms, and generalized-quadrangle graphs and
 checks both their stored matrices and strongly regular parameters.
 
+When `graphswitching` has nauty support and the nauty gtools are available,
+`make check-symmetry` checks `--sym` on Sp(6,2),
+GQ(2,4), Bil(2,2,3), and Sp(4,4). Each output is canonically labelled and
+required to contain the same expected isomorphism classes as the complete
+enumeration. This check intentionally does not require byte-for-byte output
+agreement.
+
 The fixtures use the following deterministic vertex orderings:
 
 | Fixture | Parameters | Construction | Test purpose |

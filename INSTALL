@@ -9,8 +9,8 @@ To build Graph Switching you need:
 - standard C library headers.
 
 The `install` target also uses a POSIX-style `install` command. nauty and
-Traces are optional; they are useful for converting and canonically
-labelling the generated graphs but are not build dependencies.
+Traces are optional. They are useful for converting and canonically
+labelling generated graphs, and the nauty library enables `--sym`.
 
 ## Build
 
@@ -29,6 +29,50 @@ gen_all_srgs_64vts
 gen_all_srgs_wqh6
 gen_all_srgs_wqh_generic
 ```
+
+## Build symmetry support
+
+`make` checks whether a small nauty program can be compiled and linked. If
+the check succeeds, `graphswitching` is built with `--sym` support. The
+option calls nauty directly to compute the input graph's full automorphism
+group and the setwise stabilizers used by the WQH search. If the check
+fails, the rest of `graphswitching` is still built and `--sym` reports that
+nauty support is unavailable.
+
+With a system nauty library and headers in the compiler's normal search
+paths:
+
+```sh
+make
+```
+
+If the headers or library are elsewhere, supply their locations:
+
+```sh
+make \
+    NAUTY_CPPFLAGS="-isystem /path/to/nauty" \
+    NAUTY_LDLIBS="/path/to/nauty/nauty.a"
+```
+
+Some packaged installations instead use:
+
+```sh
+make \
+    NAUTY_CPPFLAGS="-isystem /usr/include/nauty" \
+    NAUTY_LDLIBS="-lnauty"
+```
+
+Set `WITH_NAUTY=0` to disable the probe, or `WITH_NAUTY=1` to require nauty
+and let compilation fail if it cannot be used:
+
+```sh
+make WITH_NAUTY=0
+make WITH_NAUTY=1 NAUTY_CPPFLAGS="..." NAUTY_LDLIBS="..."
+```
+
+API users can enable the same code path by defining
+`GRAPHSWITCHING_WITH_NAUTY`, making `nauty.h` available, and linking the
+nauty library.
 
 To compile with a different compiler or optimization level:
 
