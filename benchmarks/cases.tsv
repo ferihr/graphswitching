@@ -1,0 +1,9 @@
+# name	suite	program	arguments	input	expected_unique	focus
+sp6-gm	quick	gen_all_srgs	63	tests/symplectic-sp6-2.matrix	2	GM enumeration and output
+sp6-gm-packed	quick	gen_all_srgs_64vts	63	tests/symplectic-sp6-2.matrix	2	Bit-packed GM comparison
+sp6-wqh-legacy-p2	quick	gen_all_srgs_wqh_generic	63 2	tests/symplectic-sp6-2.matrix	2	Legacy generic WQH baseline
+sp6-wqh-p2	quick	graphswitching	63 2	tests/symplectic-sp6-2.matrix	2	Buffered graphswitching comparison
+sp6-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	63 3	tests/symplectic-sp6-2.matrix	0	Legacy tuple-enumeration baseline
+sp6-wqh-p3	full	graphswitching	63 3	tests/symplectic-sp6-2.matrix	0	Sp(6,2) tuple enumeration
+paley73-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	73 3	tests/paley73.matrix	0	Larger legacy tuple-enumeration baseline
+paley73-wqh-p3	full	graphswitching	73 3	tests/paley73.matrix	0	Larger graphswitching tuple enumeration
