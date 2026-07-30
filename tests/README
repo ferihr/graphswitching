@@ -1,0 +1,76 @@
+Test graphs
+
+make check runs the explicit WQH method in graphswitching and the original
+gen_all_srgs_wqh_generic program for every entry in cases.txt, then requires
+their output to be byte-for-byte identical. It also compares the default GM
+method with gen_all_srgs on Sp(6,2), and checks automatic order detection,
+n=... headers, file input/output, help, and version reporting.
+generate_algebraic_fixtures.py independently reconstructs the named
+symplectic, bilinear forms, and generalized-quadrangle graphs and checks
+both their stored matrices and strongly regular parameters.
+
+When graphswitching has nauty support and the nauty gtools are available,
+make check-symmetry checks --sym on Sp(6,2), GQ(2,4), Bil(2,2,3), and
+Sp(4,4). Each output is canonically labelled and required to contain the
+same expected isomorphism classes as the complete enumeration. This check
+intentionally does not require byte-for-byte output agreement.
+
+The fixtures use the following deterministic vertex orderings.
+
+cycle4
+    Parameters: 4 vertices, p=1
+    Construction: Vertices in cyclic order.
+    Test purpose: Small switching and output smoke test.
+
+petersen
+    Parameters: 10 vertices, p=2
+    Construction: The 2-subsets of {0,...,4} in lexicographic order;
+    disjoint subsets are adjacent.
+    Test purpose: Small nontrivial strongly regular graph.
+
+clebsch
+    Parameters: 16 vertices, p=2
+    Construction: Four-bit words in numeric order; words at Hamming
+    distance 1 or 4 are adjacent.
+    Test purpose: Medium switching and output test.
+
+generalized-quadrangle-gq2-4
+    Parameters: SRG(27,10,1,5), p=5
+    Construction: Nonzero singular vectors of the elliptic quadratic form
+    on GF(2)^6, in numeric order; orthogonal points are adjacent.
+    Test purpose: Small output-producing test for WQH 5,5,n-10.
+
+symplectic-sp6-2
+    Parameters: SRG(63,30,13,15), p=3
+    Construction: Nonzero vectors of GF(2)^6 in numeric order; distinct
+    vectors are adjacent when their standard symplectic product is 0.
+    Test purpose: Sp(6,2) comparison and a tuple-enumeration-heavy test.
+
+paley73
+    Parameters: 73 vertices, p=3
+    Construction: Residues modulo 73 in numeric order; distinct residues
+    are adjacent when their difference is a nonzero square.
+    Test purpose: Larger tuple-enumeration-heavy test.
+
+bilinear-forms-bil2-2-3
+    Parameters: SRG(81,32,13,12), p=3
+    Construction: The 2 by 2 matrices over GF(3) in lexicographic order;
+    matrices are adjacent when their difference has rank 1.
+    Test purpose: Full benchmark for WQH 3,3,n-6.
+
+symplectic-sp4-4
+    Parameters: SRG(85,20,3,5), p=4
+    Construction: Projective points of GF(4)^4 in normalized lexicographic
+    order; distinct points are adjacent when their standard symplectic
+    product is 0.
+    Test purpose: Full benchmark for WQH 4,4,n-8.
+
+The Sp(6,2) and Paley(73) p=3 cases emit only the n=... header.
+Consequently, their running time primarily exercises candidate-tuple
+enumeration instead of matrix output. The two other large fixtures exercise
+the one-step switching cases reported for their respective SRG families.
+
+Regenerate the algebraically defined fixtures after intentionally changing
+their construction:
+
+    python3 tests/generate_algebraic_fixtures.py --write
