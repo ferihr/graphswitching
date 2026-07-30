@@ -2,5 +2,6 @@
 cycle4                    4         1
 petersen                  10        2
 clebsch                   16        2
+generalized-quadrangle-gq2-4 27     5
 symplectic-sp6-2          63        3
 paley73                   73        3

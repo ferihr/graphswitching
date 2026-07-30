@@ -116,6 +116,35 @@ def bilinear_forms_bil2_2_3() -> Matrix:
     return adjacency_matrix(matrices, rank_one)
 
 
+def generalized_quadrangle_gq2_4() -> Matrix:
+    """Return the point graph of the elliptic quadric Q^-(5,2)."""
+
+    def quadratic_form(vector: int) -> int:
+        coordinates = [(vector >> index) & 1 for index in range(6)]
+        return (
+            coordinates[0] * coordinates[1]
+            ^ coordinates[2] * coordinates[3]
+            ^ coordinates[4]
+            ^ coordinates[4] * coordinates[5]
+            ^ coordinates[5]
+        )
+
+    points = [
+        vector
+        for vector in range(1, 1 << 6)
+        if quadratic_form(vector) == 0
+    ]
+    return adjacency_matrix(
+        points,
+        lambda left, right: (
+            quadratic_form(left)
+            ^ quadratic_form(right)
+            ^ quadratic_form(left ^ right)
+        )
+        == 0,
+    )
+
+
 def strongly_regular_parameters(matrix: Matrix) -> tuple[int, int, int, int]:
     order = len(matrix)
     if any(len(row) != order for row in matrix):
@@ -174,6 +203,10 @@ def fixtures() -> dict[str, tuple[Matrix, tuple[int, int, int, int]]]:
         "symplectic-sp4-4.matrix": (
             symplectic_sp4_4(),
             (85, 20, 3, 5),
+        ),
+        "generalized-quadrangle-gq2-4.matrix": (
+            generalized_quadrangle_gq2_4(),
+            (27, 10, 1, 5),
         ),
     }
 
