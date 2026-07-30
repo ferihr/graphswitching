@@ -94,6 +94,7 @@ switching programs themselves.
 - `code/` contains the unchanged original standalone programs.
 - `tests/` contains regular-graph inputs used to compare the new tool with
   the original, including Petersen, Clebsch, Paley(73), and Sp(6,2) graphs.
+- `benchmarks/` contains reproducible end-to-end timing cases.
 
 The command-line parsing and matrix output are kept separate from the search
 implementation so conventional options and other output formats can be added
@@ -126,6 +127,32 @@ example:
 make clean
 make CFLAGS="-O2"
 ```
+
+## Benchmarks
+
+The `benchmarks/` directory contains reproducible end-to-end benchmarks.
+They run a switching program, convert its matrices with nauty, canonically
+label the graphs, remove duplicates, verify the number of isomorphism
+classes, and report wall, user, and system time.
+
+Run the quick Sp(6,2) comparison with:
+
+```sh
+make benchmark
+```
+
+Run the larger tuple-enumeration cases or repeat selected cases:
+
+```sh
+make benchmark BENCHMARK_SUITE=full BENCHMARK_RUNS=3
+make benchmark BENCHMARK_CASES="sp6-wqh-p2 paley73-wqh-p3"
+```
+
+The runner automatically recognizes both the unprefixed nauty program names
+(`amtog`, `labelg`) and the names used by some Linux distributions
+(`nauty-amtog`, `nauty-labelg`). See
+[`benchmarks/README.md`](benchmarks/README.md) for explicit overrides and a
+description of every case.
 
 ## Background
 
