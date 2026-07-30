@@ -12,14 +12,14 @@ regular graphs.
 
 | Program | Switching operation | Configuration |
 | --- | --- | --- |
-| `graphswitching` | WQH with parts of size `p,p,n-2p` | Pass `n` and `p` at run time; recommended interface |
+| `graphswitching` | GM by default; WQH when requested | Runtime options; recommended interface |
 | `gen_all_srgs` | GM with parts of size `4,n-4` | Set `VTS` in the source |
 | `gen_all_srgs_64vts` | Bit-packed GM with parts of size `4,n-4` | Set `VTS`; limited by the width of `INTT` |
 | `gen_all_srgs_wqh6` | WQH with parts of size `3,3,n-6` | Set `VTS` in the source |
 | `gen_all_srgs_wqh_generic` | WQH with parts of size `p,p,n-2p` | Original standalone implementation |
 
-`graphswitching` and the original generic WQH program support at most 448
-vertices and a maximum part size of 8.
+`graphswitching` supports at most 448 vertices. Its WQH method has a maximum
+part size of 8.
 
 ## Quick start
 
@@ -29,13 +29,15 @@ Build all five programs:
 make
 ```
 
-Run the generic WQH program on a 16-vertex adjacency matrix with parts of
-size 2:
+Run the default GM method. The number of vertices is inferred from the
+matrix:
 
 ```sh
-./graphswitching 16 2 < adjacency-matrix.txt \
+./graphswitching < adjacency-matrix.txt \
     > switched-matrices.txt
 ```
+
+Use `./graphswitching --help` to see every option.
 
 See `INSTALL` for compiler requirements, installation options, and details
 about configuring the specialized programs.
@@ -51,12 +53,50 @@ The programs expect an adjacency matrix for a regular, simple, undirected
 graph. They do not comprehensively validate those properties.
 
 For the three specialized programs, `n` is the compile-time `VTS` value in
-the corresponding source file. For `graphswitching` and
-`gen_all_srgs_wqh_generic`, `n` is the first command-line argument and `p`
-is the second:
+the corresponding source file. `gen_all_srgs_wqh_generic` takes `n` and `p`
+as positional arguments.
 
 ```text
-graphswitching n p
+gen_all_srgs_wqh_generic n p
+```
+
+`graphswitching` infers `n` by counting the binary entries of a square input
+matrix. It also accepts a leading `n=<number of vertices>` line. Use
+`--vertices N` to specify the order explicitly.
+
+## Command-line interface
+
+`graphswitching` uses GM switching by default. All configuration is optional:
+
+```text
+Usage: graphswitching [OPTION]...
+
+  -m, --method=METHOD   switching method: gm (default) or wqh
+  -n, --vertices=N      number of vertices; inferred when omitted
+  -p, --part-size=P     WQH part size (default: 2)
+  -i, --input=FILE      read FILE instead of standard input
+  -o, --output=FILE     write FILE instead of standard output
+  -h, --help            display help
+  -V, --version         display the version
+```
+
+For example, explicitly request WQH switching with parts of size 3:
+
+```sh
+graphswitching --method wqh --part-size 3 \
+    --input adjacency-matrix.txt --output switched-matrices.txt
+```
+
+WQH switching with parts of size `2,2,n-4` corresponds to four-vertex GM
+switching. The default uses the dedicated enumeration from `gen_all_srgs`,
+which considers each four-vertex switching set directly. Use
+`--method wqh` only when the WQH partition enumerator is specifically
+desired.
+
+The project version is recorded in `VERSION` and is available at run time:
+
+```sh
+graphswitching --version
 ```
 
 ## Output
@@ -76,7 +116,7 @@ The matrix output is compatible with the adjacency-matrix tools from
 prefixed gtools names are installed:
 
 ```sh
-./graphswitching 16 2 < adjacency-matrix.txt \
+./graphswitching < adjacency-matrix.txt \
     | nauty-amtog -q \
     | nauty-labelg -gqt \
     | LC_ALL=C sort -u > switched.g6
@@ -88,7 +128,7 @@ switching programs themselves.
 ## Project layout
 
 - `include/graphswitching.h` contains the public C interface.
-- `src/graphswitching.c` contains the reusable generic WQH implementation.
+- `src/graphswitching.c` contains the reusable GM and WQH implementations.
 - `tools/graphswitching.c` contains the command-line interface and its
   buffered output setup.
 - `code/` contains the unchanged original standalone programs.
@@ -97,8 +137,8 @@ switching programs themselves.
 - `benchmarks/` contains reproducible end-to-end timing cases.
 
 The command-line parsing and matrix output are kept separate from the search
-implementation so conventional options and other output formats can be added
-without restructuring the switching algorithm.
+implementation so other input and output formats can be added without
+restructuring the switching algorithms.
 
 ## Specialized builds
 
@@ -135,7 +175,8 @@ They run a switching program, convert its matrices with nauty, canonically
 label the graphs, remove duplicates, verify the number of isomorphism
 classes, and report wall, user, and system time.
 
-Run the quick Sp(6,2) comparison with:
+Run the quick Sp(6,2) comparison of legacy GM, the default
+`graphswitching` GM method, and explicit WQH with:
 
 ```sh
 make benchmark

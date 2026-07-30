@@ -1,6 +1,6 @@
 /* Copyright (C) 2020--2023, Ferdinand Ihringer
  *
- * Command-line interface for generic WQH graph switching.
+ * Command-line interface for graph switching.
  */
 
 #include "graphswitching.h"
@@ -9,6 +9,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define OUTPUT_BUFFER_SIZE (1024U * 1024U)
 
@@ -29,69 +30,323 @@ static int parse_positive_int(const char *text, int *value)
         return 1;
 }
 
-static void print_usage(FILE *stream, const char *program)
+struct command_line {
+        struct graphswitching_options switching;
+        const char *input_path;
+        const char *output_path;
+        int part_size_was_set;
+};
+
+static const char *program_name(const char *path)
 {
-        fprintf(stream, "Usage: %s n p\n", program);
+        const char *separator = strrchr(path, '/');
+
+        return separator == NULL ? path : separator + 1;
+}
+
+static void print_help(FILE *stream, const char *program)
+{
+        fprintf(stream, "Usage: %s [OPTION]...\n", program);
         fprintf(stream,
-                "Read an n-by-n adjacency matrix and apply WQH switching "
-                "with parts of size p.\n");
+                "Enumerate graphs obtained by applying one switching "
+                "operation.\n\n");
+        fprintf(stream,
+                "  -m, --method=METHOD   switching method: gm (default) "
+                "or wqh\n");
+        fprintf(stream,
+                "  -n, --vertices=N      number of vertices; inferred "
+                "when omitted\n");
+        fprintf(stream,
+                "  -p, --part-size=P     WQH part size (default: 2)\n");
+        fprintf(stream,
+                "  -i, --input=FILE      read FILE instead of standard "
+                "input\n");
+        fprintf(stream,
+                "  -o, --output=FILE     write FILE instead of standard "
+                "output\n");
+        fprintf(stream,
+                "  -h, --help            display this help and exit\n");
+        fprintf(stream,
+                "  -V, --version         display version information and "
+                "exit\n\n");
+        fprintf(stream,
+                "FILE may be '-' for standard input or output. Automatic "
+                "order detection\n");
+        fprintf(stream,
+                "accepts a square adjacency matrix or a leading "
+                "\"n=<vertices>\" line.\n");
+        fprintf(stream, "Limits: N <= %d; WQH P <= %d.\n",
+                GRAPHSWITCHING_MAX_VERTICES,
+                GRAPHSWITCHING_MAX_PART_SIZE);
+}
+
+static void print_usage_hint(FILE *stream, const char *program)
+{
+        fprintf(stream, "Try '%s --help' for more information.\n", program);
+}
+
+static int option_value(int argc, char *argv[], int *index,
+                        const char *long_name, char short_name,
+                        const char **value)
+{
+        const char *argument = argv[*index];
+        size_t long_length = strlen(long_name);
+
+        if (strcmp(argument, long_name) == 0 ||
+            (argument[0] == '-' && argument[1] == short_name &&
+             argument[2] == '\0')) {
+                if (*index + 1 >= argc) {
+                        return -1;
+                }
+                *value = argv[++(*index)];
+                return **value == '\0' ? -1 : 1;
+        }
+
+        if (strncmp(argument, long_name, long_length) == 0 &&
+            argument[long_length] == '=') {
+                *value = argument + long_length + 1;
+                return **value == '\0' ? -1 : 1;
+        }
+
+        if (argument[0] == '-' && argument[1] == short_name &&
+            argument[2] != '\0') {
+                *value = argument + 2;
+                return 1;
+        }
+
+        return 0;
+}
+
+static int parse_method(const char *text, enum graphswitching_method *method)
+{
+        if (strcmp(text, "gm") == 0) {
+                *method = GRAPHSWITCHING_METHOD_GM;
+                return 1;
+        }
+        if (strcmp(text, "wqh") == 0) {
+                *method = GRAPHSWITCHING_METHOD_WQH;
+                return 1;
+        }
+
+        return 0;
+}
+
+static int parse_command_line(int argc, char *argv[],
+                              struct command_line *command)
+{
+        const char *program = program_name(argv[0]);
+        int index;
+
+        graphswitching_options_init(&command->switching);
+        command->input_path = "-";
+        command->output_path = "-";
+        command->part_size_was_set = 0;
+
+        for (index = 1; index < argc; ++index) {
+                const char *argument = argv[index];
+                const char *value = NULL;
+                int matched;
+
+                if (strcmp(argument, "-h") == 0 ||
+                    strcmp(argument, "--help") == 0) {
+                        print_help(stdout, program);
+                        return 1;
+                }
+                if (strcmp(argument, "-V") == 0 ||
+                    strcmp(argument, "--version") == 0) {
+                        printf("%s %s\n", program, GRAPHSWITCHING_VERSION);
+                        return 1;
+                }
+
+                matched = option_value(argc, argv, &index, "--method",
+                                       'm', &value);
+                if (matched != 0) {
+                        if (matched < 0) {
+                                fprintf(stderr,
+                                        "%s: option '%s' requires an "
+                                        "argument\n",
+                                        program, argument);
+                                print_usage_hint(stderr, program);
+                                return -1;
+                        }
+                        if (!parse_method(value,
+                                          &command->switching.method)) {
+                                fprintf(stderr,
+                                        "%s: unknown switching method '%s'\n",
+                                        program, value);
+                                print_usage_hint(stderr, program);
+                                return -1;
+                        }
+                        continue;
+                }
+
+                matched = option_value(argc, argv, &index, "--vertices",
+                                       'n', &value);
+                if (matched != 0) {
+                        if (matched < 0 ||
+                            !parse_positive_int(
+                                    value,
+                                    &command->switching.vertex_count)) {
+                                fprintf(stderr,
+                                        "%s: --vertices requires a positive "
+                                        "integer\n",
+                                        program);
+                                return -1;
+                        }
+                        continue;
+                }
+
+                matched = option_value(argc, argv, &index, "--part-size",
+                                       'p', &value);
+                if (matched != 0) {
+                        if (matched < 0 ||
+                            !parse_positive_int(
+                                    value,
+                                    &command->switching.part_size)) {
+                                fprintf(stderr,
+                                        "%s: --part-size requires a positive "
+                                        "integer\n",
+                                        program);
+                                return -1;
+                        }
+                        command->part_size_was_set = 1;
+                        continue;
+                }
+
+                matched = option_value(argc, argv, &index, "--input",
+                                       'i', &value);
+                if (matched != 0) {
+                        if (matched < 0) {
+                                fprintf(stderr,
+                                        "%s: --input requires a file name\n",
+                                        program);
+                                return -1;
+                        }
+                        command->input_path = value;
+                        continue;
+                }
+
+                matched = option_value(argc, argv, &index, "--output",
+                                       'o', &value);
+                if (matched != 0) {
+                        if (matched < 0) {
+                                fprintf(stderr,
+                                        "%s: --output requires a file name\n",
+                                        program);
+                                return -1;
+                        }
+                        command->output_path = value;
+                        continue;
+                }
+
+                fprintf(stderr, "%s: unexpected argument '%s'\n",
+                        program, argument);
+                print_usage_hint(stderr, program);
+                return -1;
+        }
+
+        if (command->switching.vertex_count >
+            GRAPHSWITCHING_MAX_VERTICES) {
+                fprintf(stderr, "%s: --vertices must not exceed %d\n",
+                        program, GRAPHSWITCHING_MAX_VERTICES);
+                return -1;
+        }
+        if (command->switching.method == GRAPHSWITCHING_METHOD_GM &&
+            command->part_size_was_set) {
+                fprintf(stderr,
+                        "%s: --part-size is only valid with "
+                        "--method wqh\n",
+                        program);
+                return -1;
+        }
+        if (command->switching.method == GRAPHSWITCHING_METHOD_WQH &&
+            command->switching.part_size >
+                    GRAPHSWITCHING_MAX_PART_SIZE) {
+                fprintf(stderr, "%s: --part-size must not exceed %d\n",
+                        program, GRAPHSWITCHING_MAX_PART_SIZE);
+                return -1;
+        }
+        if (strcmp(command->input_path, "-") != 0 &&
+            strcmp(command->input_path, command->output_path) == 0) {
+                fprintf(stderr,
+                        "%s: input and output must not be the same file\n",
+                        program);
+                return -1;
+        }
+
+        return 0;
 }
 
 int main(int argc, char *argv[])
 {
         static char output_buffer[OUTPUT_BUFFER_SIZE];
+        struct command_line command;
         enum graphswitching_result result;
-        int vertex_count;
-        int part_size;
+        const char *program = program_name(argv[0]);
+        FILE *input = stdin;
+        FILE *output = stdout;
+        int parse_result;
+        int status = EXIT_SUCCESS;
+
+        parse_result = parse_command_line(argc, argv, &command);
+        if (parse_result > 0) {
+                return EXIT_SUCCESS;
+        }
+        if (parse_result < 0) {
+                return 2;
+        }
+
+        if (strcmp(command.input_path, "-") != 0) {
+                input = fopen(command.input_path, "rb");
+                if (input == NULL) {
+                        fprintf(stderr, "%s: cannot open '%s' for reading\n",
+                                program, command.input_path);
+                        return EXIT_FAILURE;
+                }
+        }
+        if (strcmp(command.output_path, "-") != 0) {
+                output = fopen(command.output_path, "wb");
+                if (output == NULL) {
+                        fprintf(stderr, "%s: cannot open '%s' for writing\n",
+                                program, command.output_path);
+                        if (input != stdin) {
+                                (void)fclose(input);
+                        }
+                        return EXIT_FAILURE;
+                }
+        }
 
         /*
          * Matrix enumeration can produce a large amount of output. A larger
          * full buffer reduces the number of writes without changing the
          * output format.
          */
-        (void)setvbuf(stdout, output_buffer, _IOFBF, sizeof(output_buffer));
+        (void)setvbuf(output, output_buffer, _IOFBF,
+                      sizeof(output_buffer));
 
-        if (argc != 3) {
-                print_usage(stderr, argv[0]);
-                return EXIT_FAILURE;
-        }
-
-        if (!parse_positive_int(argv[1], &vertex_count) ||
-            !parse_positive_int(argv[2], &part_size)) {
-                fprintf(stderr, "%s: n and p must be positive integers\n",
-                        argv[0]);
-                return EXIT_FAILURE;
-        }
-
-        if (vertex_count > GRAPHSWITCHING_MAX_VERTICES) {
-                fprintf(stderr, "%s: n must not exceed %d\n", argv[0],
-                        GRAPHSWITCHING_MAX_VERTICES);
-                return EXIT_FAILURE;
-        }
-
-        if (part_size > GRAPHSWITCHING_MAX_PART_SIZE) {
-                fprintf(stderr, "%s: p must not exceed %d\n", argv[0],
-                        GRAPHSWITCHING_MAX_PART_SIZE);
-                return EXIT_FAILURE;
-        }
-
-        if (2 * part_size > vertex_count) {
-                fprintf(stderr, "%s: n must be at least 2p\n", argv[0]);
-                return EXIT_FAILURE;
-        }
-
-        result = graphswitching_generate(stdin, stdout, vertex_count,
-                                         part_size);
+        result = graphswitching_generate_with_options(
+                input, output, &command.switching);
         if (result != GRAPHSWITCHING_SUCCESS) {
-                fprintf(stderr, "%s: %s\n", argv[0],
+                fprintf(stderr, "%s: %s\n", program,
                         graphswitching_result_string(result));
-                return EXIT_FAILURE;
+                status = EXIT_FAILURE;
         }
 
-        if (fflush(stdout) == EOF) {
-                fprintf(stderr, "%s: could not write output\n", argv[0]);
-                return EXIT_FAILURE;
+        if (status == EXIT_SUCCESS && fflush(output) == EOF) {
+                fprintf(stderr, "%s: could not write output\n", program);
+                status = EXIT_FAILURE;
         }
 
-        return EXIT_SUCCESS;
+        if (input != stdin && fclose(input) == EOF &&
+            status == EXIT_SUCCESS) {
+                fprintf(stderr, "%s: could not close input\n", program);
+                status = EXIT_FAILURE;
+        }
+        if (output != stdout && fclose(output) == EOF &&
+            status == EXIT_SUCCESS) {
+                fprintf(stderr, "%s: could not close output\n", program);
+                status = EXIT_FAILURE;
+        }
+
+        return status;
 }

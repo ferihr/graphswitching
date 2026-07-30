@@ -18,6 +18,28 @@ extern "C" {
 
 #define GRAPHSWITCHING_MAX_VERTICES 448
 #define GRAPHSWITCHING_MAX_PART_SIZE 8
+#define GRAPHSWITCHING_VERSION_MAJOR 0
+#define GRAPHSWITCHING_VERSION_MINOR 1
+#define GRAPHSWITCHING_VERSION_PATCH 0
+#ifndef GRAPHSWITCHING_VERSION
+#define GRAPHSWITCHING_VERSION "0.1.0"
+#endif
+
+enum graphswitching_method {
+        GRAPHSWITCHING_METHOD_GM = 0,
+        GRAPHSWITCHING_METHOD_WQH
+};
+
+struct graphswitching_options {
+        enum graphswitching_method method;
+        /*
+         * Set vertex_count to zero to infer the order from a square matrix
+         * or from an optional leading "n=<vertices>" line.
+         */
+        int vertex_count;
+        /* Used only by WQH switching. */
+        int part_size;
+};
 
 enum graphswitching_result {
         GRAPHSWITCHING_SUCCESS = 0,
@@ -26,13 +48,25 @@ enum graphswitching_result {
         GRAPHSWITCHING_OUTPUT_ERROR
 };
 
+/* Initialize options for GM switching with automatic order detection. */
+void graphswitching_options_init(struct graphswitching_options *options);
+
 /*
- * Read a vertex_count by vertex_count adjacency matrix from input and write
- * every graph obtainable by one WQH switching operation to output.
+ * Read one adjacency matrix and write every graph obtainable by one
+ * switching operation. The output starts with "n=<vertices>" and uses
+ * adjacency-matrix format.
  *
- * The two switching parts both have part_size vertices. Input characters
- * other than '0' and '1' are ignored. The output starts with "n=<vertices>"
- * and uses adjacency-matrix format.
+ * GM switching uses a four-vertex switching set. WQH switching uses two
+ * parts of part_size vertices each.
+ */
+enum graphswitching_result graphswitching_generate_with_options(
+        FILE *input,
+        FILE *output,
+        const struct graphswitching_options *options);
+
+/*
+ * Compatibility interface for WQH switching. New callers should use
+ * graphswitching_generate_with_options().
  */
 enum graphswitching_result graphswitching_generate(
         FILE *input,
