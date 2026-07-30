@@ -1,0 +1,101 @@
+# Installation
+
+## Requirements
+
+To build Graph Switching you need:
+
+- a C compiler with C99 support, such as GCC or Clang;
+- `make`; and
+- standard C library headers.
+
+The `install` target also uses a POSIX-style `install` command. nauty and
+Traces are optional; they are useful for converting and canonically
+labelling the generated graphs but are not build dependencies.
+
+## Build
+
+From the repository root, run:
+
+```sh
+make
+```
+
+This creates four executables in the repository root:
+
+```text
+gen_all_srgs
+gen_all_srgs_64vts
+gen_all_srgs_wqh6
+gen_all_srgs_wqh_generic
+```
+
+To compile with a different compiler or optimization level:
+
+```sh
+make clean
+make CC=clang CFLAGS="-O2"
+```
+
+`make check` builds every executable and verifies that the build completed.
+
+## Install
+
+The default installation prefix is `/usr/local`:
+
+```sh
+sudo make install
+```
+
+Choose another prefix if desired:
+
+```sh
+make install PREFIX="$HOME/.local"
+```
+
+For package creation, `DESTDIR` is supported:
+
+```sh
+make install DESTDIR=/tmp/graphswitching-package PREFIX=/usr
+```
+
+Remove installed executables with the same prefix:
+
+```sh
+sudo make uninstall
+```
+
+## Configure the specialized programs
+
+The graph order is compiled into these three programs:
+
+- `code/gen_all_srgs.c`
+- `code/gen_all_srgs_64vts.c`
+- `code/gen_all_srgs_wqh6.c`
+
+Edit the `#define VTS` near the top of the desired file, then rebuild its
+target. For example:
+
+```sh
+make gen_all_srgs_wqh6
+```
+
+For `gen_all_srgs_64vts`, `VTS` must fit in the bit width of `INTT`; consult
+the source comments before changing either definition.
+
+The generic WQH program accepts the graph order and part size at run time:
+
+```sh
+./gen_all_srgs_wqh_generic n p < adjacency-matrix.txt
+```
+
+Its default source configuration supports `n <= 448` and `p <= 8`. Adjust
+`MAX_VTS`, `INTT`, `BLKS`, `BLKSZ`, `LOWBLK`, and `MAX_SET` together only
+if you understand their relationship.
+
+## Clean the build
+
+Remove all generated executables:
+
+```sh
+make clean
+```
