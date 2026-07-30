@@ -1,8 +1,11 @@
 # Test graphs
 
-`make check` runs both `graphswitching` and the original
-`gen_all_srgs_wqh_generic` program for every entry in `cases.txt`, then
-requires their output to be byte-for-byte identical.
+`make check` runs the explicit WQH method in `graphswitching` and the
+original `gen_all_srgs_wqh_generic` program for every entry in `cases.txt`,
+then requires their output to be byte-for-byte identical. It also compares
+the default GM method with `gen_all_srgs` on Sp(6,2), and checks automatic
+order detection, `n=...` headers, file input/output, help, and version
+reporting.
 
 The fixtures use the following deterministic vertex orderings:
 

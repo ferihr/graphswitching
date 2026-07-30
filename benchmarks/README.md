@@ -48,8 +48,9 @@ make benchmark
 
 ## Suites and cases
 
-The default `quick` suite compares the two GM programs and the two generic
-WQH programs on Sp(6,2), reproducing the end-to-end benchmark in the project
+The default `quick` suite compares the two original GM programs, the default
+GM method in `graphswitching`, and both generic WQH implementations on
+Sp(6,2). This reproduces and extends the end-to-end benchmark in the project
 discussion.
 
 The `full` suite also uses `p=3` on Sp(6,2) and Paley(73). Those cases emit

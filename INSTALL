@@ -37,9 +37,9 @@ make clean
 make CC=clang CFLAGS="-O2"
 ```
 
-`make check` builds every executable and verifies that `graphswitching`
-produces the same adjacency-matrix output as the original generic program
-for the included test graph.
+`make check` builds every executable, exercises the standard command-line
+options, compares the default GM method with `gen_all_srgs`, and compares
+the explicit WQH method with the original generic program.
 
 ## Install
 
@@ -85,16 +85,23 @@ make gen_all_srgs_wqh6
 For `gen_all_srgs_64vts`, `VTS` must fit in the bit width of `INTT`; consult
 the source comments before changing either definition.
 
-The recommended `graphswitching` tool and the original generic WQH program
-accept the graph order and part size at run time:
+The recommended `graphswitching` tool infers the graph order by default:
 
 ```sh
-./graphswitching n p < adjacency-matrix.txt
+./graphswitching < adjacency-matrix.txt
 ```
 
-They support `n <= 448` and `p <= 8`. The original limits remain in
-`code/gen_all_srgs_wqh_generic.c`; the new interface exposes its limits in
-`include/graphswitching.h`.
+Specify it explicitly or select WQH when desired:
+
+```sh
+./graphswitching --vertices 63 < adjacency-matrix.txt
+./graphswitching --method wqh --part-size 3 < adjacency-matrix.txt
+```
+
+Run `./graphswitching --help` for the complete interface. The tool supports
+`n <= 448`; WQH supports `p <= 8`. The original limits remain in
+`code/gen_all_srgs_wqh_generic.c`, while the new interface exposes its
+limits and version in `include/graphswitching.h`.
 
 ## Clean the build
 
