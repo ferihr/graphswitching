@@ -9,14 +9,14 @@ regular graphs.
 
 | Program | Switching operation | Configuration |
 | --- | --- | --- |
+| `graphswitching` | WQH with parts of size `p,p,n-2p` | Pass `n` and `p` at run time; recommended interface |
 | `gen_all_srgs` | GM with parts of size `4,n-4` | Set `VTS` in the source |
 | `gen_all_srgs_64vts` | Bit-packed GM with parts of size `4,n-4` | Set `VTS`; limited by the width of `INTT` |
 | `gen_all_srgs_wqh6` | WQH with parts of size `3,3,n-6` | Set `VTS` in the source |
-| `gen_all_srgs_wqh_generic` | WQH with parts of size `p,p,n-2p` | Pass `n` and `p` at run time |
+| `gen_all_srgs_wqh_generic` | WQH with parts of size `p,p,n-2p` | Original standalone implementation |
 
-The generic WQH program defaults to a maximum of 448 vertices and a maximum
-part size of 8. These limits can be changed by adjusting the constants near
-the top of `code/gen_all_srgs_wqh_generic.c`.
+`graphswitching` and the original generic WQH program support at most 448
+vertices and a maximum part size of 8.
 
 ## Quick start
 
@@ -30,7 +30,7 @@ Run the generic WQH program on a 16-vertex adjacency matrix with parts of
 size 2:
 
 ```sh
-./gen_all_srgs_wqh_generic 16 2 < adjacency-matrix.txt \
+./graphswitching 16 2 < adjacency-matrix.txt \
     > switched-matrices.txt
 ```
 
@@ -48,11 +48,12 @@ The programs expect an adjacency matrix for a regular, simple, undirected
 graph. They do not comprehensively validate those properties.
 
 For the three specialized programs, `n` is the compile-time `VTS` value in
-the corresponding source file. For `gen_all_srgs_wqh_generic`, `n` is the
-first command-line argument and `p` is the second:
+the corresponding source file. For `graphswitching` and
+`gen_all_srgs_wqh_generic`, `n` is the first command-line argument and `p`
+is the second:
 
 ```text
-gen_all_srgs_wqh_generic n p
+graphswitching n p
 ```
 
 ## Output
@@ -72,7 +73,7 @@ The matrix output is compatible with the adjacency-matrix tools from
 prefixed gtools names are installed:
 
 ```sh
-./gen_all_srgs_wqh_generic 16 2 < adjacency-matrix.txt \
+./graphswitching 16 2 < adjacency-matrix.txt \
     | nauty-amtog -q \
     | nauty-labelg -gqt \
     | LC_ALL=C sort -u > switched.g6
@@ -80,6 +81,19 @@ prefixed gtools names are installed:
 
 nauty and Traces are optional and are not needed to build or run the
 switching programs themselves.
+
+## Project layout
+
+- `include/graphswitching.h` contains the public C interface.
+- `src/graphswitching.c` contains the reusable generic WQH implementation.
+- `tools/graphswitching.c` contains the command-line interface and its
+  buffered output setup.
+- `code/` contains the unchanged original standalone programs.
+- `tests/` contains inputs used to compare the new tool with the original.
+
+The command-line parsing and matrix output are kept separate from the search
+implementation so conventional options and other output formats can be added
+without restructuring the switching algorithm.
 
 ## Specialized builds
 
@@ -99,8 +113,10 @@ make gen_all_srgs
 
 The programs enumerate candidate switching sets combinatorially, so running
 time and output size can grow quickly with the number of vertices and the
-part size. The default build uses optimization and loop-unrolling flags.
-Override them when needed, for example:
+part size. `graphswitching` writes complete rows and uses a larger standard
+output buffer to reduce output overhead. The default build also uses
+optimization and loop-unrolling flags. Override them when needed, for
+example:
 
 ```sh
 make clean
