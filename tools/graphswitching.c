@@ -70,7 +70,7 @@ static void print_help(FILE *stream, const char *program)
                 "each (default: 2)\n");
         fprintf(stream,
                 "      --sym              use input-graph symmetries to "
-                "search WQH orbit representatives\n"
+                "search switching orbit representatives\n"
                 "                         (requires nauty support in this "
                 "build; changes output multiplicity/order)\n");
         fprintf(stream,
@@ -92,14 +92,16 @@ static void print_help(FILE *stream, const char *program)
                 "  gm   Godsil--McKay switching with a four-vertex "
                 "switching set (default).\n");
         fprintf(stream,
-                "       --part-size is not valid with this method.\n");
+                "       --part-size is not valid with this method. "
+                "--sym uses stabilizer orbits\n"
+                "       to prune switching sets.\n");
         fprintf(stream,
                 "  wqh  WQH switching with partition sizes P,P,N-2P. "
                 "Requires 2P <= N.\n"
-                "       --sym keeps one C1 orbit representative "
-                "and one C2 representative\n"
-                "       under its setwise stabilizer. Omitted results are "
-                "isomorphic to emitted ones.\n\n");
+                "       --sym uses stabilizer orbits to prune C1 and C2 "
+                "construction.\n"
+                "       Omitted results are isomorphic to emitted "
+                "ones.\n\n");
 
         fprintf(stream, "Input:\n");
         fprintf(stream,
@@ -126,6 +128,7 @@ static void print_help(FILE *stream, const char *program)
         fprintf(stream,
                 "  %s --method wqh --part-size 4 --input graph.matrix\n\n",
                 program);
+        fprintf(stream, "  %s --method gm --sym < graph.matrix\n", program);
         fprintf(stream,
                 "  %s --method wqh --part-size 4 --sym < graph.matrix\n\n",
                 program);
@@ -317,14 +320,6 @@ static int parse_command_line(int argc, char *argv[],
             command->part_size_was_set) {
                 fprintf(stderr,
                         "%s: --part-size is only valid with "
-                        "--method wqh\n",
-                        program);
-                return -1;
-        }
-        if (command->switching.method == GRAPHSWITCHING_METHOD_GM &&
-            command->switching.use_symmetry) {
-                fprintf(stderr,
-                        "%s: --sym is only valid with "
                         "--method wqh\n",
                         program);
                 return -1;

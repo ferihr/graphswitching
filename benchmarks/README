@@ -71,17 +71,18 @@ quick suite.
     make benchmark BENCHMARK_SUITE=full BENCHMARK_RUNS=3
     make benchmark BENCHMARK_SUITE=extrafull
 
-The separate symmetry suite uses graphswitching --sym on Sp(6,2) with p=2,
-Bil(2,2,3) with p=3, Sp(4,4) with p=4, and GQ(2,4) with p=5. Build with
-nauty support as described in INSTALL, then run:
+The separate symmetry suite uses graphswitching --sym for GM on Petersen,
+Clebsch, GQ(2,4), and Sp(6,2); it also uses WQH with p=2 on Sp(6,2), p=3
+on Bil(2,2,3), p=4 on Sp(4,4), and p=5 on GQ(2,4). Build with nauty
+support as described in INSTALL, then run:
 
     make benchmark BENCHMARK_SUITE=symmetry
     make check-symmetry
 
-These cases enumerate one representative per input-graph automorphism
-orbit, then use canonical labelling to verify that the expected output
-isomorphism classes are retained. They are excluded from quick and full so
-those suites continue to work without the nauty library.
+These cases prune the search through stabilizer orbits, then use canonical
+labelling to verify that the expected output isomorphism classes are
+retained. They are excluded from quick and full so those suites continue to
+work without the nauty library.
 
 List the cases or run only named cases:
 

@@ -57,6 +57,16 @@ class Graph6Tests(unittest.TestCase):
         self.assertTrue(bounds.accepts(Decimal(8)))
         self.assertFalse(bounds.accepts(Decimal(16)))
 
+    def test_symmetry_is_forwarded_for_both_methods(self) -> None:
+        gm = EXPLORE.Switching("gm", 2, True)
+        wqh = EXPLORE.Switching("wqh", 3, True)
+
+        self.assertEqual(gm.arguments(), ["--method", "gm", "--sym"])
+        self.assertEqual(
+            wqh.arguments(),
+            ["--method", "wqh", "--part-size", "3", "--sym"],
+        )
+
     def test_rejects_nonfinite_time_limit(self) -> None:
         with self.assertRaises(EXPLORE.argparse.ArgumentTypeError):
             EXPLORE.positive_number("nan")
