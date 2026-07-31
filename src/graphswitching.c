@@ -7,7 +7,7 @@
  * signatures, incremental degree state, and specialized bitset enumeration
  * for part sizes 3 through 5. Both use the same dynamic-order bit-packed
  * matrix and buffered row output. A nauty-enabled build can additionally
- * restrict WQH enumeration to automorphism-orbit representatives.
+ * prune GM and WQH enumeration through automorphism stabilizer orbits.
  */
 
 #include "graphswitching.h"
@@ -21,6 +21,8 @@
 
 #ifdef GRAPHSWITCHING_WITH_NAUTY
 #include <nauty.h>
+#include <naugroup.h>
+#include <schreier.h>
 #endif
 
 #define WORD_BITS 32
@@ -40,7 +42,12 @@ struct permutation_group {
         size_t generator_count;
         size_t generator_capacity;
         int *generators;
+        size_t element_count;
+        size_t element_capacity;
+        uint16_t *elements;
         int allocation_failed;
+        double order_mantissa;
+        int order_exponent;
 };
 
 struct rank_set {
@@ -49,18 +56,25 @@ struct rank_set {
         size_t capacity;
 };
 
-struct subset_queue {
-        int *vertices;
+struct subset_orbit {
+        uint16_t *subsets;
         size_t count;
         size_t capacity;
+        int subset_size;
 };
 
 struct automorphism_search {
         struct permutation_group graph_group;
         struct permutation_group c1_stabilizer;
-        struct rank_set seen_c1;
-        struct rank_set seen_c2;
-        struct subset_queue orbit_queue;
+        schreier *graph_schreier;
+        permnode *graph_generators;
+        schreier *c1_schreier;
+        permnode *c1_generators;
+        struct rank_set seen_gm[GM_SET_SIZE + 1];
+        struct rank_set
+                seen_c1[GRAPHSWITCHING_MAX_PART_SIZE + 1];
+        struct rank_set
+                seen_c2[GRAPHSWITCHING_MAX_PART_SIZE + 1];
         uint64_t binomial[GRAPHSWITCHING_MAX_VERTICES + 1]
                          [GRAPHSWITCHING_MAX_PART_SIZE + 1];
 };
@@ -103,6 +117,15 @@ static void apply_wqh(struct search_context *context,
                       const int neighbour_counts[]);
 static enum graphswitching_result choose_gm_sets(
         struct search_context *context);
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+static enum graphswitching_result choose_gm_sets_with_symmetry(
+        struct search_context *context);
+static enum graphswitching_result choose_gm_orbits_recursively(
+        struct search_context *context,
+        int switching_set[GM_SET_SIZE],
+        int selected_count,
+        const int stabilizer_orbits[]);
+#endif
 static enum graphswitching_result apply_gm_set(
         struct search_context *context,
         const int switching_set[GM_SET_SIZE]);
@@ -138,7 +161,8 @@ static enum graphswitching_result write_adjacency_matrix(
         const struct search_context *context);
 #ifdef GRAPHSWITCHING_WITH_NAUTY
 static enum graphswitching_result initialize_automorphism_search(
-        struct search_context *context);
+        struct search_context *context,
+        enum graphswitching_method method);
 static void destroy_automorphism_search(struct search_context *context);
 static enum graphswitching_result prepare_c1_orbit(
         struct search_context *context, int *is_representative);
@@ -150,20 +174,46 @@ static enum graphswitching_result compute_automorphism_group(
         int fixed_count,
         struct permutation_group *group);
 static void destroy_permutation_group(struct permutation_group *group);
-static enum graphswitching_result mark_subset_orbit(
-        struct search_context *context,
+static int permutation_group_order_exceeds(
         const struct permutation_group *group,
+        double limit);
+static void permutation_group_orbits(
+        const struct permutation_group *group,
+        int orbits[]);
+static void initialize_schreier_group(
+        const struct permutation_group *group,
+        schreier **schreier_group,
+        permnode **generators);
+static void prepare_partition_orbits(
+        struct search_context *context, int current, int orbits[]);
+static enum graphswitching_result mark_partition_subset(
+        struct search_context *context,
         int first_partition_index,
         struct rank_set *seen,
         int *is_representative);
+static enum graphswitching_result prepare_subset_orbit(
+        struct search_context *context,
+        const struct permutation_group *group,
+        const int subset[],
+        int subset_size,
+        struct rank_set *seen,
+        int stabilizer_orbits[],
+        int *is_representative);
 static uint64_t subset_rank(const struct search_context *context,
-                            const int subset[]);
+                            const int subset[], int subset_size);
 static int rank_set_insert(struct rank_set *set, uint64_t rank);
 static int rank_set_grow(struct rank_set *set);
 static void rank_set_clear(struct rank_set *set);
 static void rank_set_destroy(struct rank_set *set);
-static int subset_queue_append(struct subset_queue *queue,
-                               const int subset[], int part_size);
+static int subset_orbit_append(
+        struct subset_orbit *orbit,
+        const int subset[]);
+static int subset_orbit_grow(struct subset_orbit *orbit);
+static void subset_orbit_destroy(struct subset_orbit *orbit);
+static void initialize_vertex_orbits(int orbits[], int vertex_count);
+static int vertex_orbit_root(int parents[], int vertex);
+static void merge_vertex_orbits(int parents[], int first, int second);
+static void finish_vertex_orbits(int parents[], int vertex_count);
 static void sort_subset(int subset[], int count);
 #endif
 
@@ -194,8 +244,6 @@ enum graphswitching_result graphswitching_generate_with_options(
             options->vertex_count > GRAPHSWITCHING_MAX_VERTICES ||
             (options->use_symmetry != 0 &&
              options->use_symmetry != 1) ||
-            (options->method != GRAPHSWITCHING_METHOD_WQH &&
-             options->use_symmetry) ||
             (options->method == GRAPHSWITCHING_METHOD_WQH &&
              (options->part_size <= 0 ||
               options->part_size > GRAPHSWITCHING_MAX_PART_SIZE))) {
@@ -226,10 +274,14 @@ enum graphswitching_result graphswitching_generate_with_options(
 
 #ifdef GRAPHSWITCHING_WITH_NAUTY
         if (context.use_symmetry) {
-                result = initialize_automorphism_search(&context);
+                result = initialize_automorphism_search(
+                        &context, options->method);
                 if (result != GRAPHSWITCHING_SUCCESS) {
                         destroy_automorphism_search(&context);
                         return result;
+                }
+                if (context.automorphisms.graph_group.generator_count == 0) {
+                        context.use_symmetry = 0;
                 }
         }
 #endif
@@ -540,6 +592,13 @@ static enum graphswitching_result choose_gm_sets(
 {
         int switching_set[GM_SET_SIZE];
 
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+        if (context->use_symmetry &&
+            context->automorphisms.graph_group.generator_count > 0) {
+                return choose_gm_sets_with_symmetry(context);
+        }
+#endif
+
         for (switching_set[0] = 0;
              switching_set[0] < context->vertex_count;
              ++switching_set[0]) {
@@ -558,7 +617,6 @@ static enum graphswitching_result choose_gm_sets(
                                                 apply_gm_set(
                                                         context,
                                                         switching_set);
-
                                         if (result !=
                                             GRAPHSWITCHING_SUCCESS) {
                                                 return result;
@@ -570,6 +628,94 @@ static enum graphswitching_result choose_gm_sets(
 
         return GRAPHSWITCHING_SUCCESS;
 }
+
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+static enum graphswitching_result choose_gm_sets_with_symmetry(
+        struct search_context *context)
+{
+        struct automorphism_search *search = &context->automorphisms;
+        int switching_set[GM_SET_SIZE];
+        int root_orbits[GRAPHSWITCHING_MAX_VERTICES];
+        int size;
+
+        for (size = 1; size <= GM_SET_SIZE; ++size) {
+                rank_set_clear(&search->seen_gm[size]);
+        }
+        permutation_group_orbits(
+                &search->graph_group, root_orbits);
+        return choose_gm_orbits_recursively(
+                context, switching_set, 0, root_orbits);
+}
+
+static enum graphswitching_result choose_gm_orbits_recursively(
+        struct search_context *context,
+        int switching_set[GM_SET_SIZE],
+        int selected_count,
+        const int stabilizer_orbits[])
+{
+        struct automorphism_search *search = &context->automorphisms;
+        unsigned char used_orbit[GRAPHSWITCHING_MAX_VERTICES] = {0};
+        int vertex;
+
+        /*
+         * At every depth, retain one orbit of unordered subsets under
+         * Aut(G). Extend it by one representative from each vertex orbit
+         * of its setwise stabilizer. The global seen tables remove an
+         * extension orbit that can be reached through a different parent.
+         */
+        for (vertex = 0; vertex < context->vertex_count; ++vertex) {
+                enum graphswitching_result result;
+                int child_orbits[GRAPHSWITCHING_MAX_VERTICES];
+                int already_selected = 0;
+                int child[GM_SET_SIZE];
+                int child_count = selected_count + 1;
+                int is_representative;
+                int orbit = stabilizer_orbits[vertex];
+                int index;
+
+                for (index = 0; index < selected_count; ++index) {
+                        if (switching_set[index] == vertex) {
+                                already_selected = 1;
+                                break;
+                        }
+                }
+                if (already_selected || used_orbit[orbit]) {
+                        continue;
+                }
+                used_orbit[orbit] = 1;
+
+                memcpy(child, switching_set,
+                       (size_t)selected_count * sizeof(int));
+                child[selected_count] = vertex;
+                sort_subset(child, child_count);
+
+                if (child_count == GM_SET_SIZE) {
+                        result = apply_gm_set(context, child);
+                } else {
+                        result = prepare_subset_orbit(
+                                context, &search->graph_group,
+                                child, child_count,
+                                &search->seen_gm[child_count],
+                                child_orbits,
+                                &is_representative);
+                        if (result != GRAPHSWITCHING_SUCCESS) {
+                                return result;
+                        }
+                        if (!is_representative) {
+                                continue;
+                        }
+                        result = choose_gm_orbits_recursively(
+                                context, child, child_count,
+                                child_orbits);
+                }
+                if (result != GRAPHSWITCHING_SUCCESS) {
+                        return result;
+                }
+        }
+
+        return GRAPHSWITCHING_SUCCESS;
+}
+#endif
 
 static enum graphswitching_result apply_gm_set(
         struct search_context *context,
@@ -623,6 +769,25 @@ static enum graphswitching_result apply_gm_set(
         if (!any_switch) {
                 return GRAPHSWITCHING_SUCCESS;
         }
+
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+        if (context->use_symmetry) {
+                enum graphswitching_result result;
+                int is_representative;
+
+                result = prepare_subset_orbit(
+                        context,
+                        &context->automorphisms.graph_group,
+                        switching_set, GM_SET_SIZE,
+                        &context->automorphisms
+                                 .seen_gm[GM_SET_SIZE],
+                        NULL, &is_representative);
+                if (result != GRAPHSWITCHING_SUCCESS ||
+                    !is_representative) {
+                        return result;
+                }
+        }
+#endif
 
         apply_gm(context, switching_set, neighbour_counts);
         {
@@ -689,6 +854,9 @@ static enum graphswitching_result choose_partition(
         word_t candidate_mask[BLOCK_COUNT];
         int use_candidate_mask;
         struct partition_vertex *selected = &context->partition[current];
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+        int symmetry_orbits[GRAPHSWITCHING_MAX_VERTICES];
+#endif
 
         if (current == 2 * part_size) {
 #ifdef GRAPHSWITCHING_WITH_NAUTY
@@ -731,6 +899,14 @@ static enum graphswitching_result choose_partition(
                 }
         }
 
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+        if (context->use_symmetry) {
+                start = 0;
+                prepare_partition_orbits(
+                        context, current, symmetry_orbits);
+        }
+#endif
+
         use_candidate_mask = build_specialized_candidate_mask(
                 context, current, candidate_mask);
         for (selected->vertex =
@@ -748,6 +924,13 @@ static enum graphswitching_result choose_partition(
                 enum graphswitching_result result;
                 int valid = 1;
 
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+                if (context->use_symmetry &&
+                    symmetry_orbits[selected->vertex] !=
+                            selected->vertex) {
+                        continue;
+                }
+#endif
                 if (partition_contains(context->partition, current - 1,
                                        selected->vertex)) {
                         continue;
@@ -1189,10 +1372,9 @@ static void collect_automorphism_generator(
         int *resized;
         size_t new_capacity;
 
-        (void)count;
-        (void)orbits;
-        (void)numorbits;
-        (void)stabilizer_vertex;
+        groupautomproc(
+                count, permutation, orbits, numorbits,
+                stabilizer_vertex, vertex_count);
 
         if (group == NULL || group->allocation_failed) {
                 return;
@@ -1219,6 +1401,42 @@ static void collect_automorphism_generator(
         ++group->generator_count;
 }
 
+static void collect_group_element(
+        int *permutation, int vertex_count,
+        int *abort, void *user_data)
+{
+        struct permutation_group *group =
+                (struct permutation_group *)user_data;
+        size_t offset;
+        int vertex;
+
+        if (group->element_count == group->element_capacity) {
+                size_t new_capacity =
+                        group->element_capacity == 0
+                                ? 16
+                                : 2 * group->element_capacity;
+                uint16_t *resized = (uint16_t *)realloc(
+                        group->elements,
+                        new_capacity * (size_t)vertex_count *
+                                sizeof(uint16_t));
+
+                if (resized == NULL) {
+                        group->allocation_failed = 1;
+                        *abort = 1;
+                        return;
+                }
+                group->elements = resized;
+                group->element_capacity = new_capacity;
+        }
+
+        offset = group->element_count * (size_t)vertex_count;
+        for (vertex = 0; vertex < vertex_count; ++vertex) {
+                group->elements[offset + (size_t)vertex] =
+                        (uint16_t)permutation[vertex];
+        }
+        ++group->element_count;
+}
+
 static enum graphswitching_result compute_automorphism_group(
         const struct search_context *context,
         const struct partition_vertex fixed_subset[],
@@ -1228,6 +1446,7 @@ static enum graphswitching_result compute_automorphism_group(
         DEFAULTOPTIONS_GRAPH(options);
         statsblk statistics;
         graph *nauty_graph;
+        grouprec *group_record;
         int *lab;
         int *ptn;
         int *orbits;
@@ -1288,12 +1507,14 @@ static enum graphswitching_result compute_automorphism_group(
         }
 
         options.userautomproc = collect_automorphism_generator;
+        options.userlevelproc = grouplevelproc;
         options.schreier = TRUE;
         generator_target = group;
         nauty_check(WORDSIZE, set_words, vertex_count, NAUTYVERSIONID);
         densenauty(nauty_graph, lab, ptn, orbits, &options, &statistics,
                    set_words, vertex_count, NULL);
         generator_target = NULL;
+        group_record = groupptr(FALSE);
 
         free(nauty_graph);
         free(lab);
@@ -1301,12 +1522,26 @@ static enum graphswitching_result compute_automorphism_group(
         free(orbits);
 
         if (group->allocation_failed) {
+                freegroup(group_record);
                 destroy_permutation_group(group);
                 return GRAPHSWITCHING_MEMORY_ERROR;
         }
         if (statistics.errstatus != 0) {
+                freegroup(group_record);
                 destroy_permutation_group(group);
                 return GRAPHSWITCHING_INVALID_ARGUMENT;
+        }
+        group->order_mantissa = statistics.grpsize1;
+        group->order_exponent = statistics.grpsize2;
+        if (!permutation_group_order_exceeds(group, 4096.0)) {
+                makecosetreps(group_record);
+                (void)allgroup3(
+                        group_record, collect_group_element, group);
+        }
+        freegroup(group_record);
+        if (group->allocation_failed) {
+                destroy_permutation_group(group);
+                return GRAPHSWITCHING_MEMORY_ERROR;
         }
 
         return GRAPHSWITCHING_SUCCESS;
@@ -1315,13 +1550,120 @@ static enum graphswitching_result compute_automorphism_group(
 static void destroy_permutation_group(struct permutation_group *group)
 {
         free(group->generators);
+        free(group->elements);
         memset(group, 0, sizeof(*group));
 }
 
-static enum graphswitching_result initialize_automorphism_search(
-        struct search_context *context)
+static int permutation_group_order_exceeds(
+        const struct permutation_group *group,
+        double limit)
+{
+        double order = group->order_mantissa;
+        int exponent;
+
+        for (exponent = 0;
+             exponent < group->order_exponent;
+             ++exponent) {
+                if (order > limit / 10.0) {
+                        return 1;
+                }
+                order *= 10.0;
+        }
+        return order > limit;
+}
+
+static void permutation_group_orbits(
+        const struct permutation_group *group,
+        int orbits[])
+{
+        size_t generator;
+        int vertex;
+
+        initialize_vertex_orbits(orbits, group->vertex_count);
+        for (generator = 0;
+             generator < group->generator_count;
+             ++generator) {
+                const int *permutation =
+                        group->generators +
+                        generator * (size_t)group->vertex_count;
+
+                for (vertex = 0;
+                     vertex < group->vertex_count;
+                     ++vertex) {
+                        merge_vertex_orbits(
+                                orbits, vertex,
+                                permutation[vertex]);
+                }
+        }
+        finish_vertex_orbits(orbits, group->vertex_count);
+}
+
+static void initialize_schreier_group(
+        const struct permutation_group *group,
+        schreier **schreier_group,
+        permnode **generators)
+{
+        size_t generator;
+
+        freeschreier(schreier_group, generators);
+        newgroup(schreier_group, generators, group->vertex_count);
+        for (generator = 0;
+             generator < group->generator_count;
+             ++generator) {
+                int *permutation =
+                        group->generators +
+                        generator * (size_t)group->vertex_count;
+
+                (void)addgenerator(
+                        schreier_group,
+                        generators,
+                        permutation, group->vertex_count);
+        }
+        (void)expandschreier(
+                *schreier_group, generators, group->vertex_count);
+}
+
+static void prepare_partition_orbits(
+        struct search_context *context, int current, int orbits[])
 {
         struct automorphism_search *search = &context->automorphisms;
+        schreier *schreier_group;
+        permnode **generators;
+        int fixed[GRAPHSWITCHING_MAX_PART_SIZE];
+        int first;
+        int fixed_count;
+        const int *stabilizer_orbits;
+        int index;
+
+        if (current < context->part_size) {
+                first = 0;
+                fixed_count = current;
+                schreier_group = search->graph_schreier;
+                generators = &search->graph_generators;
+        } else {
+                first = context->part_size;
+                fixed_count = current - context->part_size;
+                schreier_group = search->c1_schreier;
+                generators = &search->c1_generators;
+        }
+
+        for (index = 0; index < fixed_count; ++index) {
+                fixed[index] =
+                        context->partition[first + index].vertex;
+        }
+        stabilizer_orbits = getorbits(
+                fixed, fixed_count, schreier_group, generators,
+                context->vertex_count);
+        memcpy(orbits, stabilizer_orbits,
+               (size_t)context->vertex_count * sizeof(int));
+}
+
+static enum graphswitching_result initialize_automorphism_search(
+        struct search_context *context,
+        enum graphswitching_method method)
+{
+        struct automorphism_search *search = &context->automorphisms;
+        enum graphswitching_result result;
         int vertex;
         int part;
 
@@ -1346,20 +1688,39 @@ static enum graphswitching_result initialize_automorphism_search(
                 }
         }
 
-        return compute_automorphism_group(
+        result = compute_automorphism_group(
                 context, NULL, 0, &search->graph_group);
+        if (result == GRAPHSWITCHING_SUCCESS &&
+            method == GRAPHSWITCHING_METHOD_WQH &&
+            search->graph_group.generator_count > 0) {
+                initialize_schreier_group(
+                        &search->graph_group,
+                        &search->graph_schreier,
+                        &search->graph_generators);
+        }
+        return result;
 }
 
 static void destroy_automorphism_search(struct search_context *context)
 {
         struct automorphism_search *search = &context->automorphisms;
+        int size;
 
         destroy_permutation_group(&search->graph_group);
         destroy_permutation_group(&search->c1_stabilizer);
-        rank_set_destroy(&search->seen_c1);
-        rank_set_destroy(&search->seen_c2);
-        free(search->orbit_queue.vertices);
-        memset(&search->orbit_queue, 0, sizeof(search->orbit_queue));
+        freeschreier(
+                &search->graph_schreier, &search->graph_generators);
+        freeschreier(
+                &search->c1_schreier, &search->c1_generators);
+        for (size = 0; size <= GM_SET_SIZE; ++size) {
+                rank_set_destroy(&search->seen_gm[size]);
+        }
+        for (size = 0;
+             size <= GRAPHSWITCHING_MAX_PART_SIZE;
+             ++size) {
+                rank_set_destroy(&search->seen_c1[size]);
+                rank_set_destroy(&search->seen_c2[size]);
+        }
 }
 
 static enum graphswitching_result prepare_c1_orbit(
@@ -1367,53 +1728,167 @@ static enum graphswitching_result prepare_c1_orbit(
 {
         struct automorphism_search *search = &context->automorphisms;
         enum graphswitching_result result;
+        int part_size = context->part_size;
 
-        result = mark_subset_orbit(
-                context, &search->graph_group, 0,
-                &search->seen_c1, is_representative);
-        if (result != GRAPHSWITCHING_SUCCESS || !*is_representative) {
+        result = mark_partition_subset(
+                context, 0,
+                &search->seen_c1[part_size], is_representative);
+        if (result != GRAPHSWITCHING_SUCCESS ||
+            !*is_representative) {
                 return result;
         }
 
-        rank_set_clear(&search->seen_c2);
-        return compute_automorphism_group(
-                context, context->partition, context->part_size,
+        rank_set_clear(&search->seen_c2[part_size]);
+        result = compute_automorphism_group(
+                context, context->partition, part_size,
                 &search->c1_stabilizer);
+        if (result == GRAPHSWITCHING_SUCCESS) {
+                initialize_schreier_group(
+                        &search->c1_stabilizer,
+                        &search->c1_schreier,
+                        &search->c1_generators);
+        }
+        return result;
 }
 
 static enum graphswitching_result prepare_c2_orbit(
         struct search_context *context, int *is_representative)
 {
-        struct automorphism_search *search = &context->automorphisms;
+        int part_size = context->part_size;
 
-        return mark_subset_orbit(
-                context, &search->c1_stabilizer, context->part_size,
-                &search->seen_c2, is_representative);
+        return mark_partition_subset(
+                context, part_size,
+                &context->automorphisms.seen_c2[part_size],
+                is_representative);
 }
 
-static enum graphswitching_result mark_subset_orbit(
+static enum graphswitching_result mark_partition_subset(
         struct search_context *context,
-        const struct permutation_group *group,
         int first_partition_index,
         struct rank_set *seen,
         int *is_representative)
 {
-        struct subset_queue *queue =
-                &context->automorphisms.orbit_queue;
         int subset[GRAPHSWITCHING_MAX_PART_SIZE];
-        int image[GRAPHSWITCHING_MAX_PART_SIZE];
         int part_size = context->part_size;
         int inserted;
         int index;
-        size_t head;
 
         for (index = 0; index < part_size; ++index) {
                 subset[index] =
                         context->partition[
                                 first_partition_index + index].vertex;
         }
+        sort_subset(subset, part_size);
+        inserted = rank_set_insert(
+                seen, subset_rank(context, subset, part_size));
+        if (inserted < 0) {
+                return GRAPHSWITCHING_MEMORY_ERROR;
+        }
+        *is_representative = inserted;
+        return GRAPHSWITCHING_SUCCESS;
+}
 
-        inserted = rank_set_insert(seen, subset_rank(context, subset));
+static enum graphswitching_result prepare_subset_orbit(
+        struct search_context *context,
+        const struct permutation_group *group,
+        const int subset[],
+        int subset_size,
+        struct rank_set *seen,
+        int stabilizer_orbits[],
+        int *is_representative)
+{
+        struct subset_orbit orbit = {0};
+        int image[GRAPHSWITCHING_MAX_PART_SIZE];
+        int inserted;
+        int store_representatives = stabilizer_orbits != NULL;
+        int vertex_count = group->vertex_count;
+        size_t position;
+        int vertex;
+
+        if (group->element_count > 0) {
+                uint64_t minimum_rank =
+                        subset_rank(context, subset, subset_size);
+                size_t element;
+
+                for (element = 0;
+                     element < group->element_count;
+                     ++element) {
+                        const uint16_t *permutation =
+                                group->elements +
+                                element * (size_t)vertex_count;
+                        uint64_t image_rank;
+                        int index;
+
+                        for (index = 0;
+                             index < subset_size;
+                             ++index) {
+                                image[index] = permutation[subset[index]];
+                        }
+                        sort_subset(image, subset_size);
+                        image_rank = subset_rank(
+                                context, image, subset_size);
+                        if (image_rank < minimum_rank) {
+                                minimum_rank = image_rank;
+                        }
+                }
+
+                inserted = rank_set_insert(seen, minimum_rank);
+                if (inserted < 0) {
+                        return GRAPHSWITCHING_MEMORY_ERROR;
+                }
+                if (!inserted) {
+                        *is_representative = 0;
+                        return GRAPHSWITCHING_SUCCESS;
+                }
+                *is_representative = 1;
+
+                if (store_representatives) {
+                        initialize_vertex_orbits(
+                                stabilizer_orbits, vertex_count);
+                        for (element = 0;
+                             element < group->element_count;
+                             ++element) {
+                                const uint16_t *permutation =
+                                        group->elements +
+                                        element *
+                                                (size_t)vertex_count;
+                                int stabilizes = 1;
+                                int index;
+
+                                for (index = 0;
+                                     index < subset_size;
+                                     ++index) {
+                                        image[index] =
+                                                permutation[subset[index]];
+                                }
+                                sort_subset(image, subset_size);
+                                for (index = 0;
+                                     index < subset_size;
+                                     ++index) {
+                                        if (image[index] != subset[index]) {
+                                                stabilizes = 0;
+                                                break;
+                                        }
+                                }
+                                if (stabilizes) {
+                                        for (vertex = 0;
+                                             vertex < vertex_count;
+                                             ++vertex) {
+                                                merge_vertex_orbits(
+                                                        stabilizer_orbits,
+                                                        vertex,
+                                                        permutation[vertex]);
+                                        }
+                                }
+                        }
+                        finish_vertex_orbits(
+                                stabilizer_orbits, vertex_count);
+                }
+                return GRAPHSWITCHING_SUCCESS;
+        }
+
+        inserted = rank_set_insert(
+                seen, subset_rank(context, subset, subset_size));
         if (inserted < 0) {
                 return GRAPHSWITCHING_MEMORY_ERROR;
         }
@@ -1421,55 +1896,84 @@ static enum graphswitching_result mark_subset_orbit(
                 *is_representative = 0;
                 return GRAPHSWITCHING_SUCCESS;
         }
+        *is_representative = 1;
 
-        queue->count = 0;
-        if (!subset_queue_append(queue, subset, part_size)) {
+        if (store_representatives) {
+                struct partition_vertex fixed_subset[
+                        GRAPHSWITCHING_MAX_PART_SIZE] = {{0}};
+                struct permutation_group stabilizer = {0};
+                enum graphswitching_result result;
+                int index;
+
+                for (index = 0; index < subset_size; ++index) {
+                        fixed_subset[index].vertex = subset[index];
+                }
+                result = compute_automorphism_group(
+                        context, fixed_subset, subset_size,
+                        &stabilizer);
+                if (result == GRAPHSWITCHING_SUCCESS) {
+                        permutation_group_orbits(
+                                &stabilizer, stabilizer_orbits);
+                }
+                destroy_permutation_group(&stabilizer);
+                return result;
+        }
+
+        orbit.subset_size = subset_size;
+        if (!subset_orbit_append(&orbit, subset)) {
+                subset_orbit_destroy(&orbit);
                 return GRAPHSWITCHING_MEMORY_ERROR;
         }
 
-        for (head = 0; head < queue->count; ++head) {
+        for (position = 0; position < orbit.count; ++position) {
                 size_t generator;
 
-                memcpy(subset,
-                       queue->vertices + head * (size_t)part_size,
-                       (size_t)part_size * sizeof(int));
                 for (generator = 0;
                      generator < group->generator_count;
                      ++generator) {
                         const int *permutation =
                                 group->generators +
-                                generator *
-                                        (size_t)group->vertex_count;
+                                generator * (size_t)vertex_count;
+                        uint64_t rank;
+                        int index;
 
-                        for (index = 0; index < part_size; ++index) {
-                                image[index] =
-                                        permutation[subset[index]];
+                        for (index = 0;
+                             index < subset_size;
+                             ++index) {
+                                image[index] = permutation[
+                                        orbit.subsets[
+                                                position *
+                                                        (size_t)subset_size +
+                                                (size_t)index]];
                         }
-                        sort_subset(image, part_size);
-                        inserted = rank_set_insert(
-                                seen, subset_rank(context, image));
+                        sort_subset(image, subset_size);
+                        rank = subset_rank(
+                                context, image, subset_size);
+
+                        inserted = rank_set_insert(seen, rank);
                         if (inserted < 0) {
+                                subset_orbit_destroy(&orbit);
                                 return GRAPHSWITCHING_MEMORY_ERROR;
                         }
                         if (inserted &&
-                            !subset_queue_append(
-                                    queue, image, part_size)) {
+                            !subset_orbit_append(&orbit, image)) {
+                                subset_orbit_destroy(&orbit);
                                 return GRAPHSWITCHING_MEMORY_ERROR;
                         }
                 }
         }
 
-        *is_representative = 1;
+        subset_orbit_destroy(&orbit);
         return GRAPHSWITCHING_SUCCESS;
 }
 
 static uint64_t subset_rank(const struct search_context *context,
-                            const int subset[])
+                            const int subset[], int subset_size)
 {
         uint64_t rank = 0;
         int index;
 
-        for (index = 0; index < context->part_size; ++index) {
+        for (index = 0; index < subset_size; ++index) {
                 rank += context->automorphisms
                                 .binomial[subset[index]][index + 1];
         }
@@ -1562,35 +2066,112 @@ static void rank_set_destroy(struct rank_set *set)
         memset(set, 0, sizeof(*set));
 }
 
-static int subset_queue_append(struct subset_queue *queue,
-                               const int subset[], int part_size)
+static int subset_orbit_append(
+        struct subset_orbit *orbit,
+        const int subset[])
 {
-        if (queue->count == queue->capacity) {
-                size_t new_capacity =
-                        queue->capacity == 0
-                                ? 1024
-                                : 2 * queue->capacity;
-                int *resized;
+        size_t offset;
+        int index;
 
-                if (new_capacity >
-                    SIZE_MAX / (size_t)part_size / sizeof(int)) {
-                        return 0;
-                }
-                resized = (int *)realloc(
-                        queue->vertices,
-                        new_capacity * (size_t)part_size * sizeof(int));
-                if (resized == NULL) {
-                        return 0;
-                }
-                queue->vertices = resized;
-                queue->capacity = new_capacity;
+        if (orbit->count == orbit->capacity &&
+            !subset_orbit_grow(orbit)) {
+                return 0;
         }
 
-        memcpy(queue->vertices +
-                       queue->count * (size_t)part_size,
-               subset, (size_t)part_size * sizeof(int));
-        ++queue->count;
+        offset = orbit->count * (size_t)orbit->subset_size;
+        for (index = 0; index < orbit->subset_size; ++index) {
+                orbit->subsets[offset + (size_t)index] =
+                        (uint16_t)subset[index];
+        }
+        ++orbit->count;
         return 1;
+}
+
+static int subset_orbit_grow(struct subset_orbit *orbit)
+{
+        size_t new_capacity =
+                orbit->capacity == 0 ? 16 : 2 * orbit->capacity;
+        uint16_t *new_subsets;
+
+        new_subsets = (uint16_t *)malloc(
+                new_capacity * (size_t)orbit->subset_size *
+                sizeof(uint16_t));
+        if (new_subsets == NULL) {
+                return 0;
+        }
+
+        if (orbit->count > 0) {
+                memcpy(new_subsets, orbit->subsets,
+                       orbit->count *
+                               (size_t)orbit->subset_size *
+                               sizeof(uint16_t));
+        }
+        free(orbit->subsets);
+        orbit->subsets = new_subsets;
+        orbit->capacity = new_capacity;
+        return 1;
+}
+
+static void subset_orbit_destroy(struct subset_orbit *orbit)
+{
+        free(orbit->subsets);
+        memset(orbit, 0, sizeof(*orbit));
+}
+
+static void initialize_vertex_orbits(int orbits[], int vertex_count)
+{
+        int vertex;
+
+        for (vertex = 0; vertex < vertex_count; ++vertex) {
+                orbits[vertex] = vertex;
+        }
+}
+
+static int vertex_orbit_root(int parents[], int vertex)
+{
+        int root = vertex;
+
+        while (parents[root] != root) {
+                root = parents[root];
+        }
+        while (parents[vertex] != vertex) {
+                int parent = parents[vertex];
+
+                parents[vertex] = root;
+                vertex = parent;
+        }
+        return root;
+}
+
+static void merge_vertex_orbits(int parents[], int first, int second)
+{
+        int first_root = vertex_orbit_root(parents, first);
+        int second_root = vertex_orbit_root(parents, second);
+
+        if (first_root != second_root) {
+                parents[second_root] = first_root;
+        }
+}
+
+static void finish_vertex_orbits(int parents[], int vertex_count)
+{
+        int minimum[GRAPHSWITCHING_MAX_VERTICES];
+        int vertex;
+
+        for (vertex = 0; vertex < vertex_count; ++vertex) {
+                minimum[vertex] = vertex_count;
+        }
+        for (vertex = 0; vertex < vertex_count; ++vertex) {
+                int root = vertex_orbit_root(parents, vertex);
+
+                if (vertex < minimum[root]) {
+                        minimum[root] = vertex;
+                }
+        }
+        for (vertex = 0; vertex < vertex_count; ++vertex) {
+                parents[vertex] =
+                        minimum[vertex_orbit_root(parents, vertex)];
+        }
 }
 
 static void sort_subset(int subset[], int count)

@@ -9,12 +9,15 @@ WITH_NAUTY ?= auto
 NAUTY_PKG_CPPFLAGS := $(shell $(PKG_CONFIG) --cflags nauty 2>/dev/null)
 NAUTY_PKG_LDLIBS := $(shell $(PKG_CONFIG) --libs nauty 2>/dev/null)
 NAUTY_DEFAULT_HEADER := $(shell \
-	printf '%s\n' '#include <nauty.h>' \
+	printf '%s\n' '#include <nauty.h>' '#include <naugroup.h>' \
+		'#include <schreier.h>' \
 	| $(CC) $(CPPFLAGS) -x c -E - >/dev/null 2>&1 \
 	&& printf 1 || printf 0)
 NAUTY_HEADER_DIRS ?= /usr/local/include/nauty /usr/include/nauty
 NAUTY_SYSTEM_HEADER_DIR := $(firstword $(foreach dir,$(NAUTY_HEADER_DIRS),\
-	$(if $(wildcard $(dir)/nauty.h),$(dir))))
+	$(if $(and $(wildcard $(dir)/nauty.h),\
+		$(wildcard $(dir)/naugroup.h),\
+		$(wildcard $(dir)/schreier.h)),$(dir))))
 NAUTY_SYSTEM_CPPFLAGS := $(if $(NAUTY_SYSTEM_HEADER_DIR),\
 	-isystem $(NAUTY_SYSTEM_HEADER_DIR))
 NAUTY_CPPFLAGS ?= $(if $(NAUTY_PKG_CPPFLAGS),\
@@ -26,8 +29,15 @@ ifeq ($(WITH_NAUTY),1)
 NAUTY_ENABLED := 1
 else ifeq ($(WITH_NAUTY),auto)
 NAUTY_ENABLED := $(shell \
-	printf '%s\n' '#include <nauty.h>' \
-		'int main(void) { nauty_check(WORDSIZE, 1, 1, NAUTYVERSIONID); return 0; }' \
+	printf '%s\n' '#include <nauty.h>' '#include <naugroup.h>' \
+		'#include <schreier.h>' \
+		'int main(void) {' \
+		'  schreier *group = 0; permnode *generators = 0;' \
+		'  grouprec *record = groupptr(FALSE); (void)record;' \
+		'  nauty_check(WORDSIZE, 1, 1, NAUTYVERSIONID);' \
+		'  newgroup(&group, &generators, 1);' \
+		'  freeschreier(&group, &generators); return 0;' \
+		'}' \
 	| $(CC) $(CPPFLAGS) $(NAUTY_CPPFLAGS) -x c - -x none \
 		$(LDFLAGS) $(NAUTY_LDLIBS) -o /dev/null \
 		>/dev/null 2>&1 && printf 1 || printf 0)
@@ -105,6 +115,10 @@ check-symmetry: graphswitching
 		exit 2; \
 	fi
 	$(PYTHON) benchmarks/run.py \
+		sp6-gm-sym \
+		petersen-gm-sym \
+		clebsch-gm-sym \
+		gq2-4-gm-sym \
 		sp6-wqh-sym-p2 \
 		gq2-4-wqh-sym-p5 \
 		bil223-wqh-sym-p3 \
@@ -167,11 +181,19 @@ check: $(PROGRAMS) $(TEST_CASES)
 	if ./graphswitching --part-size 2 < tests/petersen.matrix \
 		> /dev/null 2>&1; then exit 1; fi; \
 	if test "$(NAUTY_ENABLED)" = 1; then \
+		./graphswitching --method gm --sym \
+			< tests/petersen.matrix > /dev/null; \
 		./graphswitching --method wqh --sym \
 			< tests/petersen.matrix > /dev/null; \
-	elif ./graphswitching --method wqh --sym \
-		< tests/petersen.matrix > /dev/null 2>&1; then \
-		exit 1; \
+	else \
+		if ./graphswitching --method gm --sym \
+			< tests/petersen.matrix > /dev/null 2>&1; then \
+			exit 1; \
+		fi; \
+		if ./graphswitching --method wqh --sym \
+			< tests/petersen.matrix > /dev/null 2>&1; then \
+			exit 1; \
+		fi; \
 	fi; \
 	printf "Checking default GM against gen_all_srgs (Sp(6,2))... "; \
 	gm_legacy=$$(./gen_all_srgs \

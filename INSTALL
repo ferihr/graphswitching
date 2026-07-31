@@ -38,7 +38,9 @@ first uses pkg-config or the compiler's normal search paths. It also
 recognizes the common packaged header locations:
 
     /usr/local/include/nauty/nauty.h
+    /usr/local/include/nauty/schreier.h
     /usr/include/nauty/nauty.h
+    /usr/include/nauty/schreier.h
 
 For example, a nauty installation with its header at
 /usr/include/nauty/nauty.h and its library in the normal system library
@@ -48,9 +50,9 @@ path is detected by an ordinary:
 
 When the check succeeds, graphswitching is built with --sym support. The
 option calls nauty directly to compute the input graph's full automorphism
-group and the setwise stabilizers used by the WQH search. If the check
-fails, the rest of graphswitching is still built and --sym reports that
-nauty support is unavailable.
+group and the stabilizer orbits required by the selected switching method.
+If the check fails, the rest of graphswitching is still built and --sym
+reports that nauty support is unavailable.
 
 If the headers or library are in another location, supply them explicitly:
 

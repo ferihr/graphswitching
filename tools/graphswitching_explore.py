@@ -51,8 +51,8 @@ class Switching:
         arguments = ["--method", self.method]
         if self.method == "wqh":
             arguments.extend(("--part-size", str(self.part_size)))
-            if self.symmetry:
-                arguments.append("--sym")
+        if self.symmetry:
+            arguments.append("--sym")
         return arguments
 
 
@@ -211,7 +211,7 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
     parser.add_argument(
         "--sym",
         action="store_true",
-        help="pass --sym to graphswitching (WQH only)",
+        help="pass --sym to graphswitching",
     )
     automorphisms = parser.add_argument_group(
         "automorphism group size filter"
@@ -274,8 +274,6 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
     )
     parsed = parser.parse_args(arguments)
 
-    if parsed.sym and parsed.method != "wqh":
-        parser.error("--sym is only valid with --method wqh")
     if parsed.aut_size is not None and (
         parsed.min_aut_size is not None or parsed.max_aut_size is not None
     ):
