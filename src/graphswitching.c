@@ -125,6 +125,18 @@ static enum graphswitching_result choose_gm_orbits_recursively(
         int switching_set[GM_SET_SIZE],
         int selected_count,
         const int stabilizer_orbits[]);
+static enum graphswitching_result prepare_raw_subset(
+        struct search_context *context,
+        const int subset[], int subset_size,
+        struct rank_set *seen,
+        int stabilizer_orbits[],
+        int *is_representative);
+static enum graphswitching_result prepare_gm_singleton(
+        struct search_context *context, int vertex,
+        int stabilizer_orbits[], int *is_representative);
+static void build_gm_regular_completion_mask(
+        const struct search_context *context,
+        const int switching_set[GM_SET_SIZE], word_t mask[]);
 #endif
 static enum graphswitching_result apply_gm_set(
         struct search_context *context,
@@ -150,6 +162,10 @@ static int test_regular_11(const struct search_context *context, int current);
 static int test_regular_12(const struct search_context *context, int current);
 static int test_regular_21(const struct search_context *context, int current);
 static int test_regular_22(const struct search_context *context, int current);
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+static int partition_blocks_can_extend(
+        const struct search_context *context, int selected_count);
+#endif
 static enum graphswitching_result read_adjacency_matrix(
         struct search_context *context, FILE *input, int requested_vertices);
 static int parse_order_header(const char *line, int *vertex_count);
@@ -161,8 +177,7 @@ static enum graphswitching_result write_adjacency_matrix(
         const struct search_context *context);
 #ifdef GRAPHSWITCHING_WITH_NAUTY
 static enum graphswitching_result initialize_automorphism_search(
-        struct search_context *context,
-        enum graphswitching_method method);
+        struct search_context *context);
 static void destroy_automorphism_search(struct search_context *context);
 static enum graphswitching_result prepare_c1_orbit(
         struct search_context *context, int *is_representative);
@@ -275,7 +290,7 @@ enum graphswitching_result graphswitching_generate_with_options(
 #ifdef GRAPHSWITCHING_WITH_NAUTY
         if (context.use_symmetry) {
                 result = initialize_automorphism_search(
-                        &context, options->method);
+                        &context);
                 if (result != GRAPHSWITCHING_SUCCESS) {
                         destroy_automorphism_search(&context);
                         return result;
@@ -655,13 +670,20 @@ static enum graphswitching_result choose_gm_orbits_recursively(
 {
         struct automorphism_search *search = &context->automorphisms;
         unsigned char used_orbit[GRAPHSWITCHING_MAX_VERTICES] = {0};
+        word_t completion_mask[BLOCK_COUNT];
         int vertex;
 
+        if (selected_count == GM_SET_SIZE - 1) {
+                build_gm_regular_completion_mask(
+                        context, switching_set, completion_mask);
+        }
+
         /*
-         * At every depth, retain one orbit of unordered subsets under
-         * Aut(G). Extend it by one representative from each vertex orbit
-         * of its setwise stabilizer. The global seen tables remove an
-         * extension orbit that can be reached through a different parent.
+         * Retain subset-orbit representatives under Aut(G), but postpone
+         * stabilizer construction when testing the remaining vertices is
+         * cheaper. In particular, the regular-completion mask makes a
+         * three-set stabilizer unnecessary. Large groups also postpone the
+         * two-set stabilizer; small groups filter their cached elements.
          */
         for (vertex = 0; vertex < context->vertex_count; ++vertex) {
                 enum graphswitching_result result;
@@ -684,6 +706,12 @@ static enum graphswitching_result choose_gm_orbits_recursively(
                 }
                 used_orbit[orbit] = 1;
 
+                if (child_count == GM_SET_SIZE &&
+                    ((completion_mask[vertex >> BLOCK_SHIFT] >>
+                      (vertex & BLOCK_MASK)) & UINT32_C(1)) == 0) {
+                        continue;
+                }
+
                 memcpy(child, switching_set,
                        (size_t)selected_count * sizeof(int));
                 child[selected_count] = vertex;
@@ -692,12 +720,26 @@ static enum graphswitching_result choose_gm_orbits_recursively(
                 if (child_count == GM_SET_SIZE) {
                         result = apply_gm_set(context, child);
                 } else {
-                        result = prepare_subset_orbit(
-                                context, &search->graph_group,
-                                child, child_count,
-                                &search->seen_gm[child_count],
-                                child_orbits,
-                                &is_representative);
+                        if (child_count == 1) {
+                                result = prepare_gm_singleton(
+                                        context, child[0], child_orbits,
+                                        &is_representative);
+                        } else if (child_count == 3 ||
+                                   (child_count == 2 &&
+                                    search->graph_group.element_count == 0)) {
+                                result = prepare_raw_subset(
+                                        context, child, child_count,
+                                        &search->seen_gm[child_count],
+                                        child_orbits,
+                                        &is_representative);
+                        } else {
+                                result = prepare_subset_orbit(
+                                        context, &search->graph_group,
+                                        child, child_count,
+                                        &search->seen_gm[child_count],
+                                        child_orbits,
+                                        &is_representative);
+                        }
                         if (result != GRAPHSWITCHING_SUCCESS) {
                                 return result;
                         }
@@ -713,6 +755,118 @@ static enum graphswitching_result choose_gm_orbits_recursively(
                 }
         }
 
+        return GRAPHSWITCHING_SUCCESS;
+}
+
+static enum graphswitching_result prepare_gm_singleton(
+        struct search_context *context, int vertex,
+        int stabilizer_orbits[], int *is_representative)
+{
+        struct automorphism_search *search = &context->automorphisms;
+        int fixed[1];
+        const int *orbits;
+        int inserted;
+
+        inserted = rank_set_insert(
+                &search->seen_gm[1],
+                subset_rank(context, &vertex, 1));
+        if (inserted < 0) {
+                return GRAPHSWITCHING_MEMORY_ERROR;
+        }
+        *is_representative = inserted;
+        if (!inserted) {
+                return GRAPHSWITCHING_SUCCESS;
+        }
+
+        fixed[0] = vertex;
+        orbits = getorbits(
+                fixed, 1, search->graph_schreier,
+                &search->graph_generators,
+                context->vertex_count);
+        memcpy(stabilizer_orbits, orbits,
+               (size_t)context->vertex_count * sizeof(int));
+        return GRAPHSWITCHING_SUCCESS;
+}
+
+static void build_gm_regular_completion_mask(
+        const struct search_context *context,
+        const int switching_set[GM_SET_SIZE], word_t mask[])
+{
+        int degrees[GM_SET_SIZE - 1] = {0};
+        int degree_sum = 0;
+        int pattern = 0;
+        int index;
+        int other;
+        int word_index;
+
+        for (index = 0; index < GM_SET_SIZE - 1; ++index) {
+                for (other = index + 1;
+                     other < GM_SET_SIZE - 1;
+                     ++other) {
+                        int adjacent = adjacency_bit(
+                                context, switching_set[index],
+                                switching_set[other]);
+
+                        degrees[index] += adjacent;
+                        degrees[other] += adjacent;
+                }
+        }
+        for (index = 0; index < GM_SET_SIZE - 1; ++index) {
+                degree_sum += degrees[index];
+        }
+
+        if (degree_sum == 0) {
+                pattern = 0;
+        } else if (degree_sum == 6) {
+                pattern = (1 << (GM_SET_SIZE - 1)) - 1;
+        } else {
+                for (index = 0; index < GM_SET_SIZE - 1; ++index) {
+                        if ((degree_sum == 2 && degrees[index] == 0) ||
+                            (degree_sum == 4 && degrees[index] == 1)) {
+                                pattern |= 1 << index;
+                        }
+                }
+        }
+
+        for (word_index = 0; word_index < BLOCK_COUNT; ++word_index) {
+                mask[word_index] = UINT32_MAX;
+        }
+        for (index = 0; index < GM_SET_SIZE - 1; ++index) {
+                int row_offset = switching_set[index] * BLOCK_COUNT;
+
+                for (word_index = 0;
+                     word_index < BLOCK_COUNT;
+                     ++word_index) {
+                        word_t neighbours =
+                                context->adjacency[
+                                        row_offset + word_index];
+
+                        mask[word_index] &=
+                                ((pattern >> index) & 1)
+                                        ? neighbours
+                                        : ~neighbours;
+                }
+        }
+}
+
+static enum graphswitching_result prepare_raw_subset(
+        struct search_context *context,
+        const int subset[], int subset_size,
+        struct rank_set *seen,
+        int stabilizer_orbits[],
+        int *is_representative)
+{
+        int inserted = rank_set_insert(
+                seen, subset_rank(context, subset, subset_size));
+
+        if (inserted < 0) {
+                return GRAPHSWITCHING_MEMORY_ERROR;
+        }
+        *is_representative = inserted;
+        if (inserted) {
+                initialize_vertex_orbits(
+                        stabilizer_orbits, context->vertex_count);
+        }
         return GRAPHSWITCHING_SUCCESS;
 }
 #endif
@@ -960,6 +1114,21 @@ static enum graphswitching_result choose_partition(
                                 valid = 0;
                         }
                 }
+
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+                /*
+                 * With at most one C2 vertex every observed outside degree
+                 * can still extend to a balanced or extreme block. Delay
+                 * this scan until it can reject a branch.
+                 */
+                if (valid && context->use_symmetry && part_size >= 3 &&
+                    current + 1 > part_size + 1) {
+                        if (!partition_blocks_can_extend(
+                                    context, current + 1)) {
+                                valid = 0;
+                        }
+                }
+#endif
 
                 if (valid) {
                         result = choose_partition(context, current + 1);
@@ -1305,6 +1474,74 @@ static int test_regular_21(const struct search_context *context, int current)
                context->c1_cross_degrees[
                        context->partition[part_size].vertex];
 }
+
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+static int partition_blocks_can_extend(
+        const struct search_context *context, int selected_count)
+{
+        int part_size = context->part_size;
+        int first_selected =
+                selected_count < part_size ? selected_count : part_size;
+        int second_selected =
+                selected_count > part_size
+                        ? selected_count - part_size
+                        : 0;
+        int first_remaining = part_size - first_selected;
+        int second_remaining = part_size - second_selected;
+        int remaining = 2 * part_size - selected_count;
+        int forced = 0;
+        int vertex;
+
+        for (vertex = 0; vertex < context->vertex_count; ++vertex) {
+                int first_observed = 0;
+                int second_observed = 0;
+                int interval_low;
+                int interval_high;
+                int index;
+                int possible;
+
+                if (partition_contains(
+                            context->partition,
+                            selected_count - 1, vertex)) {
+                        continue;
+                }
+                if (first_selected == part_size) {
+                        first_observed =
+                                context->c1_cross_degrees[vertex];
+                } else {
+                        for (index = 0; index < first_selected; ++index) {
+                                first_observed += adjacency_bit(
+                                        context, vertex,
+                                        context->partition[index].vertex);
+                        }
+                }
+                for (index = 0; index < second_selected; ++index) {
+                        second_observed += adjacency_bit(
+                                context, vertex,
+                                context->partition[part_size + index].vertex);
+                }
+
+                interval_low =
+                        first_observed > second_observed
+                                ? first_observed
+                                : second_observed;
+                interval_high =
+                        first_observed + first_remaining <
+                                        second_observed + second_remaining
+                                ? first_observed + first_remaining
+                                : second_observed + second_remaining;
+                possible = interval_low <= interval_high ||
+                           (first_observed == first_selected &&
+                            second_observed == 0) ||
+                           (first_observed == 0 &&
+                            second_observed == second_selected);
+                if (!possible && ++forced > remaining) {
+                        return 0;
+                }
+        }
+        return 1;
+}
+#endif
 
 static enum graphswitching_result apply_partition_global(
         struct search_context *context)
@@ -1659,8 +1896,7 @@ static void prepare_partition_orbits(
 }
 
 static enum graphswitching_result initialize_automorphism_search(
-        struct search_context *context,
-        enum graphswitching_method method)
+        struct search_context *context)
 {
         struct automorphism_search *search = &context->automorphisms;
         enum graphswitching_result result;
@@ -1691,7 +1927,6 @@ static enum graphswitching_result initialize_automorphism_search(
         result = compute_automorphism_group(
                 context, NULL, 0, &search->graph_group);
         if (result == GRAPHSWITCHING_SUCCESS &&
-            method == GRAPHSWITCHING_METHOD_WQH &&
             search->graph_group.generator_count > 0) {
                 initialize_schreier_group(
                         &search->graph_group,

@@ -92,14 +92,19 @@ representatives of the switching-set or partition orbits:
     graphswitching --method wqh --part-size 4 --sym \
         --input adjacency-matrix.txt --output switched-matrices.txt
 
-This mode computes Aut(G) with nauty. GM constructs unordered subsets using
-the setwise stabilizer at each step. Small groups are enumerated once so
-their elements can be reused for canonical subset-orbit keys and setwise
-stabilizers; larger groups use nauty's coloured stabilizer calculation.
-WQH constructs C1 through successive point stabilizers, computes its
-setwise stabilizer, and then constructs C2 through successive stabilizer
-orbits. If a switching set or partition is omitted, switching it would
-produce a graph isomorphic to one produced from a retained representative.
+This mode computes Aut(G) with nauty. GM uses a Schreier point stabilizer
+for the first vertex and setwise stabilizers while their orbit reduction is
+worth their cost. A bit mask retains only vertices that can complete a
+regular four-set, so the three-set stabilizer is deliberately postponed;
+large groups postpone the two-set stabilizer as well. Small groups are
+enumerated once so their elements can be reused for canonical subset-orbit
+keys and setwise stabilizers. WQH constructs C1 through successive point
+stabilizers, computes its setwise stabilizer, and then constructs C2 through
+successive stabilizer orbits. After the second C2 vertex, it also rejects a
+partial partition when too many outside vertices cannot extend to an
+allowed block. If a switching set or partition is omitted, switching it
+would produce a graph isomorphic to one produced from a retained
+representative.
 The mode therefore preserves the set of output isomorphism classes, but
 not raw output multiplicity or ordering. Different representatives can
 still happen to produce isomorphic graphs; use canonical labelling when
