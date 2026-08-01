@@ -74,7 +74,10 @@ quick suite.
 The separate symmetry suite uses graphswitching --sym for GM on Petersen,
 Clebsch, GQ(2,4), and Sp(6,2); it also uses WQH with p=2 on Sp(6,2), p=3
 on Bil(2,2,3), p=4 on Sp(4,4), and p=5 on GQ(2,4). Build with nauty
-support as described in INSTALL, then run:
+support as described in INSTALL. The suite also compares ordinary GM with
+GM --sym on two canonical graphs obtained after two and three rounds of GM
+switching from Sp(6,2). Their automorphism groups have orders 8 and 1,
+respectively. Run:
 
     make benchmark BENCHMARK_SUITE=symmetry
     make check-symmetry

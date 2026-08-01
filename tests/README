@@ -53,6 +53,18 @@ symplectic-sp6-2
     vectors are adjacent when their standard symplectic product is 0.
     Test purpose: Sp(6,2) comparison and a tuple-enumeration-heavy test.
 
+symplectic-sp6-2-gm2-aut8
+    Parameters: 63 vertices, automorphism group order 8.
+    Construction: Canonical representative reached after two rounds of GM
+    switching from symplectic-sp6-2.
+    Test purpose: Symmetry-overhead benchmark near the observed crossover.
+
+symplectic-sp6-2-gm3-aut1
+    Parameters: 63 vertices, trivial automorphism group.
+    Construction: Canonical representative reached after three rounds of GM
+    switching from symplectic-sp6-2.
+    Test purpose: Symmetry-overhead benchmark with no nontrivial symmetry.
+
 paley73
     Parameters: 73 vertices, p=3
     Construction: Residues modulo 73 in numeric order; distinct residues
