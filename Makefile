@@ -122,7 +122,9 @@ check-symmetry: graphswitching
 		sp6-wqh-sym-p2 \
 		gq2-4-wqh-sym-p5 \
 		bil223-wqh-sym-p3 \
-		sp4-4-wqh-sym-p4
+		sp4-4-wqh-sym-p4 \
+		sp6-gm2-aut8-gm-sym \
+		sp6-gm3-aut1-gm-sym
 
 check: $(PROGRAMS) $(TEST_CASES)
 	$(PYTHON) tests/generate_algebraic_fixtures.py
