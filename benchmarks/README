@@ -43,7 +43,9 @@ There are three cumulative suites:
   - `short` is the default Sp(6,2) comparison and is designed to finish
     within one minute on the reference machine.
   - `full` adds every reasonably quick case: extended ordinary WQH and GM,
-    all `--sym` regressions, and the nine paper examples.
+    all `--sym` regressions, the nine paper examples, and deterministic
+    paired ordinary and `--sym` witnesses for every fixed method not
+    already covered by an output-producing standard graph.
   - `extrafull` runs every case. It adds the legacy Sp(4,4) WQH baseline,
     which takes roughly 11 minutes by itself in the reference environment.
 
@@ -61,13 +63,25 @@ List the cases or run only named cases:
     python3 benchmarks/run.py --runs 5 sp6-gm sp6-gm-packed
     python3 benchmarks/run.py gq2-4-wqh-p5 bil223-wqh-p3 sp4-4-wqh-p4
 
-The case definitions live in cases.tsv. The short suite currently expects
-two isomorphism classes from each Sp(6,2) benchmark. The
-tuple-enumeration-only p=3 cases expect zero. The GQ(2,4) case expects one
-output class. The Bil(2,2,3) and Sp(4,4) counts agree with the one-step
-results reported in "Switching for small strongly regular graphs":
+The case definitions live in cases.tsv and are ordered by input graph, so
+different programs and methods on the same graph appear next to each other.
+The short suite currently expects two isomorphism classes from each Sp(6,2)
+benchmark. The tuple-enumeration-only p=3 cases expect zero. The GQ(2,4)
+case expects one output class. The Bil(2,2,3) and Sp(4,4) counts agree with
+the one-step results reported in "Switching for small strongly regular
+graphs":
 
     https://ajc.maths.uq.edu.au/pdf/84/ajc_v84_p028.pdf
+
+The paper examples intentionally exercise complete search on the published
+inputs even when no changed class is emitted. The deterministic `witness-*`
+cases complement them: each has a planted admissible embedding and paired
+ordinary/`--sym` rows, and is checked to produce switched graphs that are
+nonisomorphic to its input. Their orders are selected per method to keep the
+search measurable while remaining suitable for `full`; they are not
+equal-size cross-method comparisons. Together with the output-producing
+standard graphs, they give positive benchmark coverage in both enumeration
+modes for every implemented switching method.
 
 For useful comparisons, run benchmarks on an otherwise idle machine and
 record the compiler, CFLAGS, nauty version, CPU, and operating system.

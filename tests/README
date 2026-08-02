@@ -16,6 +16,13 @@ exercises a guaranteed nontrivial ordinary switch for every method. Under
 make check-symmetry, it also requires ordinary and --sym enumeration to
 produce the same nonempty canonical class set on those examples.
 
+The same checker generates and validates the deterministic
+`witness-*.matrix` benchmark graphs. These plant an admissible embedding in
+reproducible asymmetric surrounding structure. For the fixed method
+instances not already covered by an output-producing standard graph,
+make check-symmetry also proves that ordinary and --sym enumeration agree
+and that every emitted canonical class is nonisomorphic to the input.
+
 test_graphswitching_explore.py checks graph6 decoding, adjacency-matrix
 conversion, automorphism bounds, canonical seed handling, per-round
 deduplication, graph limits, parallel worker pipelines, and optional
