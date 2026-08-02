@@ -87,3 +87,22 @@ For useful comparisons, run benchmarks on an otherwise idle machine and
 record the compiler, CFLAGS, nauty version, CPU, and operating system.
 Wall-clock timings from different machines or builds should not be compared
 without that context.
+
+GCC option tuning
+
+Run the short suite under several conservative GCC optimization profiles and
+recommend the fastest one for the current computer with:
+
+    make tune-gcc
+
+The tuner uses three runs by default, checks every isomorphism-class count,
+ranks profiles by the sum of their per-case median wall times, and rebuilds
+the benchmark programs with the winner. It compares `-O2`, `-O3`, the current
+`-O3 -funroll-loops` default, native versions with and without loop unrolling,
+and native LTO. Native profiles use `-march=native` and therefore produce
+binaries that may not run on a different CPU. Run on an otherwise idle
+machine; pass tuner options through Make when needed:
+
+    make tune-gcc TUNE_GCC_ARGS="--runs 5"
+    make tune-gcc TUNE_GCC_ARGS="--suite full --runs 1"
+    python3 benchmarks/tune_gcc.py --help

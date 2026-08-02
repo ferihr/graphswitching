@@ -265,6 +265,13 @@ example:
     make clean
     make CFLAGS="-O2"
 
+To compare several conservative GCC optimization profiles on the current
+computer and rebuild with the fastest one:
+
+    make tune-gcc
+
+See benchmarks/README for the tested profiles and tuner options.
+
 On graphs with a large automorphism group, --sym can reduce both
 the candidate search and output by orders of magnitude. Computing nauty
 groups and set stabilizers has overhead, so the ordinary enumerator can
