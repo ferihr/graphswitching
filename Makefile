@@ -60,6 +60,7 @@ PYTHON ?= python3
 BENCHMARK_SUITE ?= short
 BENCHMARK_RUNS ?= 1
 BENCHMARK_CASES ?=
+TUNE_GCC_ARGS ?=
 
 VERSION_FILE := VERSION
 PROJECT_VERSION := $(shell sed -n '1p' $(VERSION_FILE))
@@ -83,7 +84,7 @@ BENCHMARK_PROGRAMS := \
 	gen_all_srgs_64vts \
 	gen_all_srgs_wqh_generic
 
-.PHONY: all benchmark check check-symmetry clean install uninstall FORCE
+.PHONY: all benchmark check check-symmetry clean install tune-gcc uninstall FORCE
 
 all: $(PROGRAMS)
 
@@ -108,6 +109,9 @@ benchmark: $(BENCHMARK_PROGRAMS)
 	$(PYTHON) benchmarks/run.py \
 		--suite "$(BENCHMARK_SUITE)" \
 		--runs "$(BENCHMARK_RUNS)" $(BENCHMARK_CASES)
+
+tune-gcc:
+	$(PYTHON) benchmarks/tune_gcc.py $(TUNE_GCC_ARGS)
 
 check-symmetry: graphswitching
 	@if test "$(NAUTY_ENABLED)" != 1; then \
