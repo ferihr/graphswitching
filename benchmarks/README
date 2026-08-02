@@ -71,13 +71,12 @@ quick suite.
     make benchmark BENCHMARK_SUITE=full BENCHMARK_RUNS=3
     make benchmark BENCHMARK_SUITE=extrafull
 
-The separate symmetry suite uses graphswitching --sym for GM on Petersen,
-Clebsch, GQ(2,4), and Sp(6,2); it also uses WQH with p=2 on Sp(6,2), p=3
-on Bil(2,2,3), p=4 on Sp(4,4), and p=5 on GQ(2,4). Build with nauty
-support as described in INSTALL. The suite also compares ordinary GM with
-GM --sym on two canonical graphs obtained after two and three rounds of GM
-switching from Sp(6,2). Their automorphism groups have orders 8 and 1,
-respectively. Run:
+The separate symmetry suite runs graphswitching --sym for GM on Petersen,
+Clebsch, GQ(2,4), and Sp(6,2); it also runs WQH with p=2 on Sp(6,2), p=3 on
+Bil(2,2,3), p=4 on Sp(4,4), and p=5 on GQ(2,4). Two additional GM inputs are
+canonical graphs obtained after two and three rounds of switching from
+Sp(6,2). Their automorphism groups have orders 8 and 1, respectively. Build
+with nauty support as described in INSTALL, then run:
 
     make benchmark BENCHMARK_SUITE=symmetry
     make check-symmetry
@@ -86,6 +85,34 @@ These cases prune the search through stabilizer orbits, then use canonical
 labelling to verify that the expected output isomorphism classes are
 retained. They are excluded from quick and full so those suites continue to
 work without the nauty library.
+
+The `paper` suite runs --sym on Table 2 of Simoens and Van Overberghe, "An
+algorithm to find cospectral mates". The method data and benchmark examples
+are based on their reference implementation:
+
+    https://github.com/robinsimoens/implementing-switching-methods
+
+  - Cycle(20) with WQH6;
+  - G(20,1/2) with GM6;
+  - the Brinkmann graph with GM4,4;
+  - Complete(30) with GM4;
+  - Sp(6,2) and VO-(6,2) with AH10;
+  - Kneser(9,3) with WQH6;
+  - Grassmann J_2(5,2) with GM4,4; and
+  - Hamming(4,6) with Fano switching.
+
+The paper does not state a seed for its random graph. The stored benchmark
+uses Python's deterministic `random.Random(0)` construction and records the
+seed in the fixture name. Run the suite with:
+
+    make benchmark BENCHMARK_SUITE=paper
+    make benchmark BENCHMARK_SUITE=paper BENCHMARK_RUNS=3
+
+These examples emit no changed labelled matrices in this implementation, so
+the suite measures complete switching-set iteration. Catalogue correctness
+is checked separately by `tests/check_fixed_methods.py`, which constructs a
+guaranteed nontrivial example for every method and requires ordinary and
+--sym enumeration to produce identical canonical class sets.
 
 List the cases or run only named cases:
 

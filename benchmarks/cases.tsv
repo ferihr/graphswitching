@@ -22,7 +22,16 @@ sp6-wqh-sym-p2	symmetry	graphswitching	--method wqh --vertices 63 --part-size 2 
 gq2-4-wqh-sym-p5	symmetry	graphswitching	--method wqh --vertices 27 --part-size 5 --sym	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) partition-orbit representatives
 bil223-wqh-sym-p3	symmetry	graphswitching	--method wqh --vertices 81 --part-size 3 --sym	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) partition-orbit representatives
 sp4-4-wqh-sym-p4	symmetry	graphswitching	--method wqh --vertices 85 --part-size 4 --sym	tests/symplectic-sp4-4.matrix	1	Sp(4,4) partition-orbit representatives
-sp6-gm2-aut8-gm	symmetry	graphswitching	--method gm --vertices 63	tests/symplectic-sp6-2-gm2-aut8.matrix	252	GM round-2 Sp(6,2) descendant with automorphism group order 8
+sp6-gm2-aut8-gm	full	graphswitching	--method gm --vertices 63	tests/symplectic-sp6-2-gm2-aut8.matrix	252	GM round-2 Sp(6,2) descendant with automorphism group order 8
 sp6-gm2-aut8-gm-sym	symmetry	graphswitching	--method gm --vertices 63 --sym	tests/symplectic-sp6-2-gm2-aut8.matrix	252	Setwise-stabilizer search at automorphism group order 8
-sp6-gm3-aut1-gm	symmetry	graphswitching	--method gm --vertices 63	tests/symplectic-sp6-2-gm3-aut1.matrix	460	GM round-3 asymmetric Sp(6,2) descendant
+sp6-gm3-aut1-gm	full	graphswitching	--method gm --vertices 63	tests/symplectic-sp6-2-gm3-aut1.matrix	460	GM round-3 asymmetric Sp(6,2) descendant
 sp6-gm3-aut1-gm-sym	symmetry	graphswitching	--method gm --vertices 63 --sym	tests/symplectic-sp6-2-gm3-aut1.matrix	460	Symmetry search on a graph with trivial automorphism group
+paper-cycle20-wqh6-sym	paper	graphswitching	--method wqh --part-size 3 --vertices 20 --sym	tests/paper-cycle20.matrix	0	Simoens--Van Overberghe Table 2 Cycle(20), stabilizer-orbit search
+paper-random20-gm6-sym	paper	graphswitching	--method gm --part-size 3 --vertices 20 --sym	tests/paper-random20-p05-seed0.matrix	0	Simoens--Van Overberghe Table 2 G(20,1/2), stabilizer-orbit search
+paper-brinkmann-gm44-sym	paper	graphswitching	--method gm2 --part-size 2 --vertices 21 --sym	tests/paper-brinkmann.matrix	0	Simoens--Van Overberghe Table 2 Brinkmann graph, stabilizer-orbit search
+paper-complete30-gm-sym	paper	graphswitching	--method gm --vertices 30 --sym	tests/paper-complete30.matrix	0	Simoens--Van Overberghe Table 2 Complete(30), stabilizer-orbit search
+paper-sp6-ah10-sym	paper	graphswitching	--method ah --part-size 5 --vertices 63 --sym	tests/symplectic-sp6-2.matrix	0	Simoens--Van Overberghe Table 2 Sp(6,2), stabilizer-orbit search
+paper-affine-ah10-sym	paper	graphswitching	--method ah --part-size 5 --vertices 64 --sym	tests/paper-affine-orthogonal-6-2-minus.matrix	0	Simoens--Van Overberghe Table 2 VO-(6,2), stabilizer-orbit search
+paper-kneser9-3-wqh6-sym	paper	graphswitching	--method wqh --part-size 3 --vertices 84 --sym	tests/paper-kneser9-3.matrix	0	Simoens--Van Overberghe Table 2 Kneser(9,3), stabilizer-orbit search
+paper-grassmann-gm44-sym	paper	graphswitching	--method gm2 --part-size 2 --vertices 155 --sym	tests/paper-grassmann2-5-2.matrix	0	Simoens--Van Overberghe Table 2 Grassmann(2,5,2), stabilizer-orbit search
+paper-hamming4-6-fano-sym	paper	graphswitching	--method fano --vertices 1296 --sym	tests/paper-hamming4-6.matrix.gz	0	Simoens--Van Overberghe Table 2 Hamming(4,6), stabilizer-orbit search

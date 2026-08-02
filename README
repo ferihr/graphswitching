@@ -1,9 +1,10 @@
 Graph Switching
 
 Graph Switching is a collection of small C programs for enumerating graphs
-obtained by applying Godsil--McKay (GM) or Wang--Qiu--Hu (WQH) switching once
-to a regular graph. The programs were written for experiments with strongly
-regular graphs.
+obtained by applying spectral switching once to a regular graph. The main
+interface supports GM, WQH, and all fixed irreducible methods catalogued by
+Simoens and Van Overberghe. The programs were written for experiments with
+strongly regular graphs.
 
   Development notice: Unlike the original code, graphswitching will be
   mostly vibe coded. Use it at your own risk.
@@ -12,14 +13,14 @@ Programs
 
   Program                    Switching operation                      Configuration
   -------------------------- ---------------------------------------- ----------------------------------------
-  graphswitching             GM by default; WQH when requested        Runtime options; recommended interface
-  graphswitching-explore     Repeated GM or WQH rounds                graph6 input; parallel runtime options
+  graphswitching             GM, WQH, and fixed catalogue methods     Runtime options; recommended interface
+  graphswitching-explore     Repeated switching rounds                graph6 input; parallel runtime options
   gen_all_srgs               GM with parts of size 4,n-4              Set VTS in the source
   gen_all_srgs_64vts         Bit-packed GM with parts of size 4,n-4   Set VTS; limited by the width of INTT
   gen_all_srgs_wqh6          WQH with parts of size 3,3,n-6           Set VTS in the source
   gen_all_srgs_wqh_generic   WQH with parts of size p,p,n-2p          Original standalone implementation
 
-graphswitching supports at most 448 vertices. Its WQH method has a maximum
+graphswitching supports at most 1536 vertices. Its WQH method has a maximum
 part size of 8.
 
 Quick start
@@ -84,6 +85,32 @@ For example, explicitly request WQH switching with parts of size 3:
     graphswitching --method wqh --part-size 3 \
         --input adjacency-matrix.txt --output switched-matrices.txt
 
+Method names identify families and `--part-size P` supplies their parameter:
+
+  Method     Supported P       Simoens--Van Overberghe names
+  ---------- ----------------- ----------------------------------
+  gm         2, 3, 4           GM4, GM6, GM8
+  wqh        1 through 8       WQH with parts P,P,n-2P
+  ah         3, 5              AH6, AH10
+  gm2        2                 GM4,4
+  is3        4                 IS8(level 3)
+  is5        3, 4              IS6, IS8(level 5)
+  fano       not used          Fano
+
+The default is `--method gm --part-size 2`. Except for generic WQH, the
+larger methods enumerate the irreducible switching subgraphs catalogued by
+Robin Simoens and Steven Van Overberghe in "An algorithm to find cospectral
+mates" and their reference implementation:
+
+    https://github.com/robinsimoens/implementing-switching-methods
+
+The matrices and catalogues were adapted with the authors' permission. For
+example:
+
+    graphswitching --method gm --part-size 3 < graph.matrix  # GM6
+    graphswitching --method gm2 --part-size 2 < graph.matrix # GM4,4
+    graphswitching --method is5 --part-size 4 < graph.matrix # IS8(level 5)
+
 For highly symmetric inputs, a build with nauty support can search
 representatives of the switching-set or partition orbits:
 
@@ -92,7 +119,7 @@ representatives of the switching-set or partition orbits:
     graphswitching --method wqh --part-size 4 --sym \
         --input adjacency-matrix.txt --output switched-matrices.txt
 
-This mode computes Aut(G) with nauty. GM uses a Schreier point stabilizer
+--sym computes Aut(G) with nauty. GM uses a Schreier point stabilizer
 for the first vertex and setwise stabilizers while their orbit reduction is
 worth their cost. A bit mask retains only vertices that can complete a
 regular four-set, so the three-set stabilizer is deliberately postponed;
@@ -105,9 +132,17 @@ partial partition when too many outside vertices cannot extend to an
 allowed block. If a switching set or partition is omitted, switching it
 would produce a graph isomorphic to one produced from a retained
 representative.
-The mode therefore preserves the set of output isomorphism classes, but
-not raw output multiplicity or ordering. Different representatives can
-still happen to produce isomorphic graphs; use canonical labelling when
+
+Unlike the general canonical-construction path in the Simoens--Van
+Overberghe work, this implementation computes Aut(G) once and retains
+method-specific recursions. It avoids canonical labelling an auxiliary graph
+at every search node, while fixed template labels can retain duplicate
+operations caused by template automorphisms. The implementation details,
+pseudocode, ordinary-mode comparison, and full list of differences are in
+docs/symmetry-search.md. The mode preserves the set of output isomorphism
+classes, but not raw output multiplicity or ordering. Different
+representatives can still happen to produce isomorphic graphs; use canonical
+labelling when
 exactly one graph per isomorphism class is required.
 
 WQH switching with parts of size 2,2,n-4 corresponds to four-vertex GM
@@ -129,7 +164,7 @@ Output is written to standard output. The first line is:
 It is followed by the adjacency matrices found by one switching step, with
 a blank line after each matrix. The search can produce isomorphic graphs;
 the programs do not remove duplicates up to isomorphism. The --sym option
-can remove duplicates caused by automorphic switching sets or partitions,
+can remove duplicates caused by equivalent switching sets or partitions,
 but it is not a general graph-isomorphism filter.
 
 The matrix output is compatible with the adjacency-matrix tools from
@@ -143,9 +178,9 @@ prefixed gtools names are installed:
 
 nauty and Traces are optional. During make, the build checks whether the
 nauty headers and library are available. If they are, graphswitching gains
---sym support; otherwise the same program is built without that feature
-and reports a clear error if --sym is requested. See INSTALL for
-configuration examples.
+--sym support; otherwise the same program is built without that feature and
+reports a clear error if it is requested. See INSTALL for configuration
+examples.
 
 Iterated graph6 exploration
 
@@ -224,6 +259,9 @@ Project layout
 
 -   include/graphswitching.h contains the public C interface.
 -   src/graphswitching.c contains the reusable GM and WQH implementations.
+-   src/switching_methods.c contains the fixed switching matrices and
+    irreducible switching-subgraph catalogues.
+-   docs/symmetry-search.md documents the symmetry algorithms in pseudocode.
 -   tools/graphswitching.c contains the command-line interface and its
     buffered output setup.
 -   tools/graphswitching_explore.py contains the parallel graph6 exploration
@@ -290,6 +328,10 @@ The very slow legacy Sp(4,4) case is only included in extrafull:
 With nauty support detected, run the orbit-representative suite with:
 
     make benchmark BENCHMARK_SUITE=symmetry
+
+Run `--sym` on all nine examples from the Simoens--Van Overberghe paper:
+
+    make benchmark BENCHMARK_SUITE=paper
 
 The runner automatically recognizes both the unprefixed nauty program names
 (amtog, labelg) and the names used by some Linux distributions

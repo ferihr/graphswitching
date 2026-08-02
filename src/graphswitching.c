@@ -7,10 +7,13 @@
  * signatures, incremental degree state, and specialized bitset enumeration
  * for part sizes 3 through 5. Both use the same dynamic-order bit-packed
  * matrix and buffered row output. A nauty-enabled build can additionally
- * prune GM and WQH enumeration through automorphism stabilizer orbits.
+ * prune the searches through automorphism stabilizer orbits. The fixed
+ * switching data are adapted with permission from the Simoens--Van
+ * Overberghe reference implementation.
  */
 
 #include "graphswitching.h"
+#include "switching_methods.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -90,6 +93,8 @@ struct partition_vertex {
 struct search_context {
         int vertex_count;
         int part_size;
+        enum graphswitching_method method;
+        const struct switching_method_definition *definition;
         word_t adjacency[GRAPHSWITCHING_MAX_VERTICES * BLOCK_COUNT];
         word_t c1_signatures[GRAPHSWITCHING_MAX_VERTICES];
         unsigned char c1_cross_degrees[GRAPHSWITCHING_MAX_VERTICES];
@@ -98,6 +103,10 @@ struct search_context {
         int c1_to_c2_degrees[GRAPHSWITCHING_MAX_PART_SIZE];
         struct partition_vertex
                 partition[2 * GRAPHSWITCHING_MAX_PART_SIZE];
+        int method_vertices[GRAPHSWITCHING_MAX_METHOD_ORDER];
+        uint16_t method_blocks[GRAPHSWITCHING_MAX_METHOD_BLOCKS];
+        uint16_t method_images[GRAPHSWITCHING_MAX_METHOD_BLOCKS];
+        int method_block_count;
         FILE *output;
         int use_symmetry;
 #ifdef GRAPHSWITCHING_WITH_NAUTY
@@ -110,6 +119,8 @@ static int partition_contains(const struct partition_vertex partition[],
 static int gm_set_contains(const int switching_set[GM_SET_SIZE], int vertex);
 static int adjacency_bit(const struct search_context *context, int row,
                          int column);
+static void set_adjacency_bit(struct search_context *context, int row,
+                              int column, int value);
 static void apply_gm(struct search_context *context,
                      const int switching_set[GM_SET_SIZE],
                      const int neighbour_counts[]);
@@ -117,6 +128,9 @@ static void apply_wqh(struct search_context *context,
                       const int neighbour_counts[]);
 static enum graphswitching_result choose_gm_sets(
         struct search_context *context);
+static void build_gm_regular_completion_mask(
+        const struct search_context *context,
+        const int switching_set[GM_SET_SIZE], word_t mask[]);
 #ifdef GRAPHSWITCHING_WITH_NAUTY
 static enum graphswitching_result choose_gm_sets_with_symmetry(
         struct search_context *context);
@@ -134,15 +148,29 @@ static enum graphswitching_result prepare_raw_subset(
 static enum graphswitching_result prepare_gm_singleton(
         struct search_context *context, int vertex,
         int stabilizer_orbits[], int *is_representative);
-static void build_gm_regular_completion_mask(
-        const struct search_context *context,
-        const int switching_set[GM_SET_SIZE], word_t mask[]);
 #endif
 static enum graphswitching_result apply_gm_set(
         struct search_context *context,
         const int switching_set[GM_SET_SIZE]);
 static enum graphswitching_result choose_partition(
         struct search_context *context, int current);
+static enum graphswitching_result choose_fixed_method(
+        struct search_context *context);
+static enum graphswitching_result choose_fixed_method_recursively(
+        struct search_context *context, uint64_t subgraph, int current);
+static int fixed_method_pair_compatible(
+        const struct search_context *context, uint64_t subgraph,
+        int current, int graph_vertex);
+static int fixed_method_blocks_can_extend(
+        const struct search_context *context, const int selected[],
+        int selected_count, const uint16_t blocks[], int block_count);
+static enum graphswitching_result apply_fixed_method(
+        struct search_context *context, const int selected[]);
+static int subgraph_adjacency(uint64_t subgraph, int order,
+                              int first, int second);
+static int build_method_blocks(
+        const struct switching_method_definition *definition,
+        uint16_t blocks[], uint16_t images[]);
 static enum graphswitching_result apply_partition_global(
         struct search_context *context);
 static void cache_c1_signatures(struct search_context *context);
@@ -162,10 +190,8 @@ static int test_regular_11(const struct search_context *context, int current);
 static int test_regular_12(const struct search_context *context, int current);
 static int test_regular_21(const struct search_context *context, int current);
 static int test_regular_22(const struct search_context *context, int current);
-#ifdef GRAPHSWITCHING_WITH_NAUTY
 static int partition_blocks_can_extend(
         const struct search_context *context, int selected_count);
-#endif
 static enum graphswitching_result read_adjacency_matrix(
         struct search_context *context, FILE *input, int requested_vertices);
 static int parse_order_header(const char *line, int *vertex_count);
@@ -253,8 +279,8 @@ enum graphswitching_result graphswitching_generate_with_options(
         enum graphswitching_result result;
 
         if (input == NULL || output == NULL || options == NULL ||
-            (options->method != GRAPHSWITCHING_METHOD_GM &&
-             options->method != GRAPHSWITCHING_METHOD_WQH) ||
+            options->method < GRAPHSWITCHING_METHOD_GM ||
+            options->method > GRAPHSWITCHING_METHOD_AH10 ||
             options->vertex_count < 0 ||
             options->vertex_count > GRAPHSWITCHING_MAX_VERTICES ||
             (options->use_symmetry != 0 &&
@@ -272,7 +298,12 @@ enum graphswitching_result graphswitching_generate_with_options(
 #endif
 
         memset(&context, 0, sizeof(context));
+        context.method = options->method;
         context.part_size = options->part_size;
+        if (options->method != GRAPHSWITCHING_METHOD_WQH) {
+                context.definition = graphswitching_method_definition(
+                        options->method);
+        }
         context.output = output;
         context.use_symmetry = options->use_symmetry;
 
@@ -284,6 +315,12 @@ enum graphswitching_result graphswitching_generate_with_options(
 
         if (options->method == GRAPHSWITCHING_METHOD_WQH &&
             2 * context.part_size > context.vertex_count) {
+                return GRAPHSWITCHING_INVALID_ARGUMENT;
+        }
+        if (options->method != GRAPHSWITCHING_METHOD_GM &&
+            options->method != GRAPHSWITCHING_METHOD_WQH &&
+            (context.definition == NULL ||
+             context.definition->order > context.vertex_count)) {
                 return GRAPHSWITCHING_INVALID_ARGUMENT;
         }
 
@@ -308,7 +345,10 @@ enum graphswitching_result graphswitching_generate_with_options(
                 return GRAPHSWITCHING_OUTPUT_ERROR;
         }
 
-        if (options->method == GRAPHSWITCHING_METHOD_GM) {
+        if (options->method != GRAPHSWITCHING_METHOD_GM &&
+            options->method != GRAPHSWITCHING_METHOD_WQH) {
+                result = choose_fixed_method(&context);
+        } else if (options->method == GRAPHSWITCHING_METHOD_GM) {
                 result = choose_gm_sets(&context);
         } else {
                 result = choose_partition(&context, 0);
@@ -347,7 +387,8 @@ const char *graphswitching_result_string(enum graphswitching_result result)
         case GRAPHSWITCHING_OUTPUT_ERROR:
                 return "could not write output";
         case GRAPHSWITCHING_FEATURE_UNAVAILABLE:
-                return "symmetry search requires nauty support in this build";
+                return "selected symmetry search requires nauty support "
+                       "in this build";
         case GRAPHSWITCHING_MEMORY_ERROR:
                 return "not enough memory";
         default:
@@ -539,6 +580,21 @@ static int adjacency_bit(const struct search_context *context, int row,
                      UINT32_C(1));
 }
 
+static void set_adjacency_bit(struct search_context *context, int row,
+                              int column, int value)
+{
+        int word_index = column >> BLOCK_SHIFT;
+        word_t bit = UINT32_C(1) << (column & BLOCK_MASK);
+        word_t *entry = &context->adjacency[
+                row * BLOCK_COUNT + word_index];
+
+        if (value) {
+                *entry |= bit;
+        } else {
+                *entry &= ~bit;
+        }
+}
+
 static int partition_contains(const struct partition_vertex partition[],
                               int last, int vertex)
 {
@@ -623,11 +679,24 @@ static enum graphswitching_result choose_gm_sets(
                         for (switching_set[2] = switching_set[1] + 1;
                              switching_set[2] < context->vertex_count;
                              ++switching_set[2]) {
+                                word_t completion_mask[BLOCK_COUNT];
+
+                                build_gm_regular_completion_mask(
+                                        context, switching_set,
+                                        completion_mask);
                                 for (switching_set[3] =
                                              switching_set[2] + 1;
                                      switching_set[3] <
                                              context->vertex_count;
                                      ++switching_set[3]) {
+                                        if (((completion_mask[
+                                                      switching_set[3] >>
+                                                      BLOCK_SHIFT] >>
+                                              (switching_set[3] &
+                                               BLOCK_MASK)) &
+                                             UINT32_C(1)) == 0) {
+                                                continue;
+                                        }
                                         enum graphswitching_result result =
                                                 apply_gm_set(
                                                         context,
@@ -788,6 +857,7 @@ static enum graphswitching_result prepare_gm_singleton(
         return GRAPHSWITCHING_SUCCESS;
 }
 
+#endif
 static void build_gm_regular_completion_mask(
         const struct search_context *context,
         const int switching_set[GM_SET_SIZE], word_t mask[])
@@ -849,6 +919,7 @@ static void build_gm_regular_completion_mask(
         }
 }
 
+#ifdef GRAPHSWITCHING_WITH_NAUTY
 static enum graphswitching_result prepare_raw_subset(
         struct search_context *context,
         const int subset[], int subset_size,
@@ -1115,20 +1186,19 @@ static enum graphswitching_result choose_partition(
                         }
                 }
 
-#ifdef GRAPHSWITCHING_WITH_NAUTY
                 /*
                  * With at most one C2 vertex every observed outside degree
                  * can still extend to a balanced or extreme block. Delay
                  * this scan until it can reject a branch.
                  */
-                if (valid && context->use_symmetry && part_size >= 3 &&
+                if (valid && part_size >= 3 &&
+                    (context->use_symmetry || part_size <= 4) &&
                     current + 1 > part_size + 1) {
                         if (!partition_blocks_can_extend(
                                     context, current + 1)) {
                                 valid = 0;
                         }
                 }
-#endif
 
                 if (valid) {
                         result = choose_partition(context, current + 1);
@@ -1142,6 +1212,351 @@ static enum graphswitching_result choose_partition(
         }
 
         return GRAPHSWITCHING_SUCCESS;
+}
+
+static int subgraph_adjacency(uint64_t subgraph, int order,
+                              int first, int second)
+{
+        int bit;
+
+        if (first == second) {
+                return 0;
+        }
+        if (first > second) {
+                int temporary = first;
+
+                first = second;
+                second = temporary;
+        }
+        bit = first * (2 * order - first - 1) / 2 +
+              second - first - 1;
+        return (int)((subgraph >> bit) & UINT64_C(1));
+}
+
+static int build_method_blocks(
+        const struct switching_method_definition *definition,
+        uint16_t blocks[], uint16_t images[])
+{
+        int order = definition->order;
+        int denominator = definition->denominator;
+        int block_count = 0;
+        unsigned int mask;
+
+        for (mask = 0; mask < (1U << order); ++mask) {
+                unsigned int image = 0;
+                int valid = 1;
+                int column;
+
+                for (column = 0; column < order; ++column) {
+                        int sum = 0;
+                        int row;
+
+                        for (row = 0; row < order; ++row) {
+                                if ((mask >> row) & 1U) {
+                                        sum += definition->numerator[
+                                                row * order + column];
+                                }
+                        }
+                        if (sum == denominator) {
+                                image |= 1U << column;
+                        } else if (sum != 0) {
+                                valid = 0;
+                                break;
+                        }
+                }
+                if (valid) {
+                        blocks[block_count] = (uint16_t)mask;
+                        if (images != NULL) {
+                                images[block_count] = (uint16_t)image;
+                        }
+                        ++block_count;
+                }
+        }
+        return block_count;
+}
+
+static int fixed_method_pair_compatible(
+        const struct search_context *context, uint64_t subgraph,
+        int current, int graph_vertex)
+{
+        int previous;
+
+        for (previous = 0; previous < current; ++previous) {
+                if (adjacency_bit(
+                            context, graph_vertex,
+                            context->method_vertices[previous]) !=
+                    subgraph_adjacency(
+                            subgraph, context->definition->order,
+                            current, previous)) {
+                        return 0;
+                }
+        }
+        return 1;
+}
+
+static int fixed_method_blocks_can_extend(
+        const struct search_context *context, const int selected[],
+        int selected_count, const uint16_t blocks[], int block_count)
+{
+        int order = context->definition->order;
+        unsigned int known =
+                selected_count == 0
+                        ? 0
+                        : (1U << selected_count) - 1U;
+        int remaining = order - selected_count;
+        int forced = 0;
+        int vertex;
+
+        for (vertex = 0; vertex < context->vertex_count; ++vertex) {
+                unsigned int observed = 0;
+                int is_selected = 0;
+                int index;
+                int block;
+
+                for (index = 0; index < selected_count; ++index) {
+                        if (selected[index] == vertex) {
+                                is_selected = 1;
+                                break;
+                        }
+                        if (adjacency_bit(
+                                    context, vertex, selected[index])) {
+                                observed |= 1U << index;
+                        }
+                }
+                if (is_selected) {
+                        continue;
+                }
+                for (block = 0; block < block_count; ++block) {
+                        if (((unsigned int)blocks[block] & known) ==
+                            observed) {
+                                break;
+                        }
+                }
+                if (block == block_count && ++forced > remaining) {
+                        return 0;
+                }
+        }
+        return 1;
+}
+
+static enum graphswitching_result choose_fixed_method_recursively(
+        struct search_context *context, uint64_t subgraph, int current)
+{
+        int order = context->definition->order;
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+        int use_symmetry = context->use_symmetry;
+        int symmetry_orbits[GRAPHSWITCHING_MAX_VERTICES];
+#endif
+        int vertex;
+
+        if (current == order) {
+                return apply_fixed_method(
+                        context, context->method_vertices);
+        }
+
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+        if (use_symmetry) {
+                const int *orbits = getorbits(
+                        context->method_vertices, current,
+                        context->automorphisms.graph_schreier,
+                        &context->automorphisms.graph_generators,
+                        context->vertex_count);
+
+                memcpy(symmetry_orbits, orbits,
+                       (size_t)context->vertex_count * sizeof(int));
+        }
+#endif
+
+        for (vertex = 0; vertex < context->vertex_count; ++vertex) {
+                enum graphswitching_result result;
+                int index;
+
+#ifdef GRAPHSWITCHING_WITH_NAUTY
+                if (use_symmetry &&
+                    symmetry_orbits[vertex] != vertex) {
+                        continue;
+                }
+#endif
+                for (index = 0; index < current; ++index) {
+                        if (context->method_vertices[index] == vertex) {
+                                break;
+                        }
+                }
+                if (index < current ||
+                    !fixed_method_pair_compatible(
+                            context, subgraph, current, vertex)) {
+                        continue;
+                }
+
+                context->method_vertices[current] = vertex;
+                if (!fixed_method_blocks_can_extend(
+                            context, context->method_vertices,
+                            current + 1, context->method_blocks,
+                            context->method_block_count)) {
+                        continue;
+                }
+                result = choose_fixed_method_recursively(
+                        context, subgraph, current + 1);
+                if (result != GRAPHSWITCHING_SUCCESS) {
+                        return result;
+                }
+        }
+        return GRAPHSWITCHING_SUCCESS;
+}
+
+static enum graphswitching_result choose_fixed_method(
+        struct search_context *context)
+{
+        size_t subgraph_index;
+
+        context->method_block_count = build_method_blocks(
+                context->definition, context->method_blocks,
+                context->method_images);
+        for (subgraph_index = 0;
+             subgraph_index <
+                     context->definition->irreducible_subgraph_count;
+             ++subgraph_index) {
+                enum graphswitching_result result;
+                uint64_t subgraph = context->definition
+                                            ->irreducible_subgraphs[
+                                                    subgraph_index];
+
+                result = choose_fixed_method_recursively(
+                        context, subgraph, 0);
+                if (result != GRAPHSWITCHING_SUCCESS) {
+                        return result;
+                }
+        }
+        return GRAPHSWITCHING_SUCCESS;
+}
+
+static enum graphswitching_result apply_fixed_method(
+        struct search_context *context, const int selected[])
+{
+        const struct switching_method_definition *definition =
+                context->definition;
+        size_t word_count =
+                (size_t)context->vertex_count * BLOCK_COUNT;
+        word_t *saved = (word_t *)malloc(word_count * sizeof(word_t));
+        int order = definition->order;
+        int denominator = definition->denominator;
+        int denominator_squared = denominator * denominator;
+        int changed = 0;
+        int first;
+        enum graphswitching_result result = GRAPHSWITCHING_SUCCESS;
+
+        if (saved == NULL) {
+                return GRAPHSWITCHING_MEMORY_ERROR;
+        }
+        memcpy(saved, context->adjacency, word_count * sizeof(word_t));
+
+        for (first = 0; first < order; ++first) {
+                int second;
+
+                for (second = 0; second < order; ++second) {
+                        int scaled = 0;
+                        int row;
+                        int value;
+
+                        for (row = 0; row < order; ++row) {
+                                int column;
+
+                                for (column = 0; column < order; ++column) {
+                                        int adjacent =
+                                                (int)((saved[
+                                                        selected[row] *
+                                                                BLOCK_COUNT +
+                                                        (selected[column] >>
+                                                         BLOCK_SHIFT)] >>
+                                                       (selected[column] &
+                                                        BLOCK_MASK)) &
+                                                      UINT32_C(1));
+
+                                        scaled +=
+                                                definition->numerator[
+                                                        row * order + first] *
+                                                adjacent *
+                                                definition->numerator[
+                                                        column * order +
+                                                        second];
+                                }
+                        }
+                        if (scaled != 0 &&
+                            scaled != denominator_squared) {
+                                result = GRAPHSWITCHING_INVALID_ARGUMENT;
+                                goto restore;
+                        }
+                        value = scaled == denominator_squared;
+                        if (value != adjacency_bit(
+                                             context, selected[first],
+                                             selected[second])) {
+                                changed = 1;
+                        }
+                        set_adjacency_bit(
+                                context, selected[first],
+                                selected[second], value);
+                }
+        }
+
+        for (first = 0; first < context->vertex_count; ++first) {
+                int is_selected = 0;
+                int index;
+
+                for (index = 0; index < order; ++index) {
+                        if (selected[index] == first) {
+                                is_selected = 1;
+                                break;
+                        }
+                }
+                if (is_selected) {
+                        continue;
+                }
+                for (index = 0; index < order; ++index) {
+                        int scaled = 0;
+                        int row;
+                        int value;
+
+                        for (row = 0; row < order; ++row) {
+                                int adjacent =
+                                        (int)((saved[
+                                                first * BLOCK_COUNT +
+                                                (selected[row] >>
+                                                 BLOCK_SHIFT)] >>
+                                               (selected[row] & BLOCK_MASK)) &
+                                              UINT32_C(1));
+
+                                scaled += definition->numerator[
+                                                  row * order + index] *
+                                          adjacent;
+                        }
+                        if (scaled != 0 && scaled != denominator) {
+                                result = GRAPHSWITCHING_INVALID_ARGUMENT;
+                                goto restore;
+                        }
+                        value = scaled == denominator;
+                        if (value !=
+                            (int)((saved[
+                                    first * BLOCK_COUNT +
+                                    (selected[index] >> BLOCK_SHIFT)] >>
+                                   (selected[index] & BLOCK_MASK)) &
+                                  UINT32_C(1))) {
+                                changed = 1;
+                        }
+                        set_adjacency_bit(
+                                context, first, selected[index], value);
+                        set_adjacency_bit(
+                                context, selected[index], first, value);
+                }
+        }
+
+        if (changed) {
+                result = write_adjacency_matrix(context);
+        }
+
+restore:
+        memcpy(context->adjacency, saved, word_count * sizeof(word_t));
+        free(saved);
+        return result;
 }
 
 static void cache_c1_signatures(struct search_context *context)
@@ -1475,7 +1890,6 @@ static int test_regular_21(const struct search_context *context, int current)
                        context->partition[part_size].vertex];
 }
 
-#ifdef GRAPHSWITCHING_WITH_NAUTY
 static int partition_blocks_can_extend(
         const struct search_context *context, int selected_count)
 {
@@ -1541,7 +1955,6 @@ static int partition_blocks_can_extend(
         }
         return 1;
 }
-#endif
 
 static enum graphswitching_result apply_partition_global(
         struct search_context *context)

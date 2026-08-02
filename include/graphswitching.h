@@ -16,18 +16,29 @@
 extern "C" {
 #endif
 
-#define GRAPHSWITCHING_MAX_VERTICES 448
+#define GRAPHSWITCHING_MAX_VERTICES 1536
 #define GRAPHSWITCHING_MAX_PART_SIZE 8
 #define GRAPHSWITCHING_VERSION_MAJOR 0
 #define GRAPHSWITCHING_VERSION_MINOR 1
-#define GRAPHSWITCHING_VERSION_PATCH 6
+#define GRAPHSWITCHING_VERSION_PATCH 7
 #ifndef GRAPHSWITCHING_VERSION
-#define GRAPHSWITCHING_VERSION "0.1.6"
+#define GRAPHSWITCHING_VERSION "0.1.7"
 #endif
 
 enum graphswitching_method {
         GRAPHSWITCHING_METHOD_GM = 0,
-        GRAPHSWITCHING_METHOD_WQH
+        GRAPHSWITCHING_METHOD_WQH,
+        GRAPHSWITCHING_METHOD_GM6,
+        GRAPHSWITCHING_METHOD_WQH6,
+        GRAPHSWITCHING_METHOD_AH6,
+        GRAPHSWITCHING_METHOD_IS6,
+        GRAPHSWITCHING_METHOD_FANO,
+        GRAPHSWITCHING_METHOD_GM8,
+        GRAPHSWITCHING_METHOD_GM44,
+        GRAPHSWITCHING_METHOD_WQH8,
+        GRAPHSWITCHING_METHOD_IS8_LEVEL3,
+        GRAPHSWITCHING_METHOD_IS8_LEVEL5,
+        GRAPHSWITCHING_METHOD_AH10
 };
 
 struct graphswitching_options {
@@ -64,9 +75,10 @@ void graphswitching_options_init(struct graphswitching_options *options);
  * adjacency-matrix format.
  *
  * GM switching uses a four-vertex switching set. WQH switching uses two
- * parts of part_size vertices each. With use_symmetry enabled, output
- * multiplicity and order can change, but every result omitted is isomorphic
- * to a result produced from an orbit representative.
+ * parts of part_size vertices each. The remaining method values select the
+ * fixed irreducible Simoens--Van Overberghe catalogues. With use_symmetry
+ * enabled, output multiplicity and order can change, but every result omitted
+ * is isomorphic to a result produced from an orbit representative.
  */
 enum graphswitching_result graphswitching_generate_with_options(
         FILE *input,

@@ -6,8 +6,15 @@ their output to be byte-for-byte identical. It also compares the default GM
 method with gen_all_srgs on Sp(6,2), and checks automatic order detection,
 n=... headers, file input/output, help, and version reporting.
 generate_algebraic_fixtures.py independently reconstructs the named
-symplectic, bilinear forms, and generalized-quadrangle graphs and checks
-both their stored matrices and strongly regular parameters.
+symplectic, bilinear forms, generalized-quadrangle, and paper benchmark
+graphs. It checks their stored matrices and either their strongly regular
+parameters or their exact order and degree set.
+
+check_fixed_methods.py verifies the rational orthogonality and irreducible
+subgraph counts for every fixed Simoens--Van Overberghe catalogue, then
+exercises a guaranteed nontrivial ordinary switch for every method. Under
+make check-symmetry, it also requires ordinary and --sym enumeration to
+produce the same nonempty canonical class set on those examples.
 
 test_graphswitching_explore.py checks graph6 decoding, adjacency-matrix
 conversion, automorphism bounds, canonical seed handling, per-round
@@ -18,9 +25,16 @@ the default make check does not require nauty gtools.
 When graphswitching has nauty support and the nauty gtools are available,
 make check-symmetry checks GM --sym on Petersen, Clebsch, GQ(2,4), and
 Sp(6,2); WQH --sym on Sp(6,2), GQ(2,4), Bil(2,2,3), and Sp(4,4) is checked
-as well. Each output is canonically labelled and required to contain the
-same expected isomorphism classes as the complete enumeration. This check
+as well. The order-8 and asymmetric Sp(6,2) descendants are also included.
+Each output is canonically labelled and required to contain the same
+expected isomorphism classes as the complete enumeration. This check
 intentionally does not require byte-for-byte output agreement.
+
+The paper fixtures reconstruct the nine graph families in Table 2 of the
+Simoens--Van Overberghe preprint: Cycle(20), a seeded G(20,1/2), Brinkmann,
+Complete(30), VO-(6,2), Kneser(9,3), Grassmann J_2(5,2), and Hamming(4,6),
+together with the existing Sp(6,2) fixture. The paper does not specify its
+random seed, so the fixture fixes seed 0.
 
 The fixtures use the following deterministic vertex orderings.
 

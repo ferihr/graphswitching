@@ -39,6 +39,15 @@ struct command_line {
         const char *input_path;
         const char *output_path;
         int part_size_was_set;
+        enum command_line_method {
+                COMMAND_METHOD_GM,
+                COMMAND_METHOD_WQH,
+                COMMAND_METHOD_AH,
+                COMMAND_METHOD_GM2,
+                COMMAND_METHOD_IS3,
+                COMMAND_METHOD_IS5,
+                COMMAND_METHOD_FANO
+        } method;
 };
 
 static const char *program_name(const char *path)
@@ -60,14 +69,14 @@ static void print_help(FILE *stream, const char *program)
         fprintf(stream, "Options:\n");
         fprintf(stream,
                 "  -m METHOD, --method=METHOD\n"
-                "                         select gm (default) or wqh "
-                "switching\n");
+                "                         select a switching method "
+                "(default: gm)\n");
         fprintf(stream,
                 "  -n N, --vertices=N    use N vertices instead of "
                 "inferring the order\n");
         fprintf(stream,
-                "  -p P, --part-size=P   use WQH parts of P vertices "
-                "each (default: 2)\n");
+                "  -p P, --part-size=P   set the method parameter P "
+                "(default: 2)\n");
         fprintf(stream,
                 "      --sym              use input-graph symmetries to "
                 "search switching orbit representatives\n"
@@ -89,12 +98,10 @@ static void print_help(FILE *stream, const char *program)
 
         fprintf(stream, "Switching methods:\n");
         fprintf(stream,
-                "  gm   Godsil--McKay switching with a four-vertex "
-                "switching set (default).\n");
+                "  gm   Godsil--McKay switching: P=2,3,4 selects "
+                "GM4, GM6, GM8 (default: P=2).\n");
         fprintf(stream,
-                "       --part-size is not valid with this method. "
-                "--sym uses stabilizer orbits\n"
-                "       to prune switching sets.\n");
+                "       --sym uses stabilizer orbits.\n");
         fprintf(stream,
                 "  wqh  WQH switching with partition sizes P,P,N-2P. "
                 "Requires 2P <= N.\n"
@@ -102,6 +109,17 @@ static void print_help(FILE *stream, const char *program)
                 "construction.\n"
                 "       Omitted results are isomorphic to emitted "
                 "ones.\n\n");
+        fprintf(stream,
+                "  Other fixed families (irreducible switching "
+                "subgraphs):\n"
+                "       ah:   P=3,5 selects AH6, AH10.\n"
+                "       gm2:  P=2 selects GM4,4.\n"
+                "       is3:  P=4 selects IS8(level 3).\n"
+                "       is5:  P=3,4 selects IS6, IS8(level 5).\n"
+                "       fano: selects Fano switching; --part-size is not "
+                "valid.\n"
+                "       Each supports ordinary and --sym stabilizer-orbit "
+                "search.\n\n");
 
         fprintf(stream, "Input:\n");
         fprintf(stream,
@@ -115,8 +133,8 @@ static void print_help(FILE *stream, const char *program)
         fprintf(stream,
                 "  An \"n=N\" line followed by every switched adjacency "
                 "matrix found.\n"
-                "  --sym preserves output isomorphism classes, "
-                "not raw multiplicity or order.\n\n");
+                "  --sym preserves output isomorphism classes, not raw "
+                "multiplicity or order.\n\n");
 
         fprintf(stream, "Limits:\n");
         fprintf(stream, "  1 <= N <= %d; 1 <= WQH P <= %d.\n\n",
@@ -178,14 +196,124 @@ static int option_value(int argc, char *argv[], int *index,
         return 0;
 }
 
-static int parse_method(const char *text, enum graphswitching_method *method)
+static int parse_method(const char *text, enum command_line_method *method)
 {
         if (strcmp(text, "gm") == 0) {
-                *method = GRAPHSWITCHING_METHOD_GM;
+                *method = COMMAND_METHOD_GM;
                 return 1;
         }
         if (strcmp(text, "wqh") == 0) {
-                *method = GRAPHSWITCHING_METHOD_WQH;
+                *method = COMMAND_METHOD_WQH;
+                return 1;
+        }
+        if (strcmp(text, "ah") == 0) {
+                *method = COMMAND_METHOD_AH;
+                return 1;
+        }
+        if (strcmp(text, "gm2") == 0) {
+                *method = COMMAND_METHOD_GM2;
+                return 1;
+        }
+        if (strcmp(text, "is3") == 0) {
+                *method = COMMAND_METHOD_IS3;
+                return 1;
+        }
+        if (strcmp(text, "is5") == 0) {
+                *method = COMMAND_METHOD_IS5;
+                return 1;
+        }
+        if (strcmp(text, "fano") == 0) {
+                *method = COMMAND_METHOD_FANO;
+                return 1;
+        }
+
+        return 0;
+}
+
+static int resolve_method(struct command_line *command, const char *program)
+{
+        int parameter = command->switching.part_size;
+
+        switch (command->method) {
+        case COMMAND_METHOD_GM:
+                if (parameter == 2) {
+                        command->switching.method = GRAPHSWITCHING_METHOD_GM;
+                } else if (parameter == 3) {
+                        command->switching.method = GRAPHSWITCHING_METHOD_GM6;
+                } else if (parameter == 4) {
+                        command->switching.method = GRAPHSWITCHING_METHOD_GM8;
+                } else {
+                        fprintf(stderr,
+                                "%s: --method gm supports --part-size "
+                                "2, 3, or 4\n",
+                                program);
+                        return 0;
+                }
+                return 1;
+        case COMMAND_METHOD_WQH:
+                if (parameter > GRAPHSWITCHING_MAX_PART_SIZE) {
+                        fprintf(stderr,
+                                "%s: --part-size must not exceed %d\n",
+                                program, GRAPHSWITCHING_MAX_PART_SIZE);
+                        return 0;
+                }
+                command->switching.method = GRAPHSWITCHING_METHOD_WQH;
+                return 1;
+        case COMMAND_METHOD_AH:
+                if (parameter == 3) {
+                        command->switching.method = GRAPHSWITCHING_METHOD_AH6;
+                } else if (parameter == 5) {
+                        command->switching.method = GRAPHSWITCHING_METHOD_AH10;
+                } else {
+                        fprintf(stderr,
+                                "%s: --method ah supports --part-size "
+                                "3 or 5\n",
+                                program);
+                        return 0;
+                }
+                return 1;
+        case COMMAND_METHOD_GM2:
+                if (parameter != 2) {
+                        fprintf(stderr,
+                                "%s: --method gm2 requires --part-size 2\n",
+                                program);
+                        return 0;
+                }
+                command->switching.method = GRAPHSWITCHING_METHOD_GM44;
+                return 1;
+        case COMMAND_METHOD_IS3:
+                if (parameter != 4) {
+                        fprintf(stderr,
+                                "%s: --method is3 requires --part-size 4\n",
+                                program);
+                        return 0;
+                }
+                command->switching.method =
+                        GRAPHSWITCHING_METHOD_IS8_LEVEL3;
+                return 1;
+        case COMMAND_METHOD_IS5:
+                if (parameter == 3) {
+                        command->switching.method = GRAPHSWITCHING_METHOD_IS6;
+                } else if (parameter == 4) {
+                        command->switching.method =
+                                GRAPHSWITCHING_METHOD_IS8_LEVEL5;
+                } else {
+                        fprintf(stderr,
+                                "%s: --method is5 supports --part-size "
+                                "3 or 4\n",
+                                program);
+                        return 0;
+                }
+                return 1;
+        case COMMAND_METHOD_FANO:
+                if (command->part_size_was_set) {
+                        fprintf(stderr,
+                                "%s: --part-size is not valid with "
+                                "--method fano\n",
+                                program);
+                        return 0;
+                }
+                command->switching.method = GRAPHSWITCHING_METHOD_FANO;
                 return 1;
         }
 
@@ -202,6 +330,7 @@ static int parse_command_line(int argc, char *argv[],
         command->input_path = "-";
         command->output_path = "-";
         command->part_size_was_set = 0;
+        command->method = COMMAND_METHOD_GM;
 
         for (index = 1; index < argc; ++index) {
                 const char *argument = argv[index];
@@ -235,7 +364,7 @@ static int parse_command_line(int argc, char *argv[],
                                 return -1;
                         }
                         if (!parse_method(value,
-                                          &command->switching.method)) {
+                                          &command->method)) {
                                 fprintf(stderr,
                                         "%s: unknown switching method '%s'\n",
                                         program, value);
@@ -316,19 +445,7 @@ static int parse_command_line(int argc, char *argv[],
                         program, GRAPHSWITCHING_MAX_VERTICES);
                 return -1;
         }
-        if (command->switching.method == GRAPHSWITCHING_METHOD_GM &&
-            command->part_size_was_set) {
-                fprintf(stderr,
-                        "%s: --part-size is only valid with "
-                        "--method wqh\n",
-                        program);
-                return -1;
-        }
-        if (command->switching.method == GRAPHSWITCHING_METHOD_WQH &&
-            command->switching.part_size >
-                    GRAPHSWITCHING_MAX_PART_SIZE) {
-                fprintf(stderr, "%s: --part-size must not exceed %d\n",
-                        program, GRAPHSWITCHING_MAX_PART_SIZE);
+        if (!resolve_method(command, program)) {
                 return -1;
         }
         if (strcmp(command->input_path, "-") != 0 &&
