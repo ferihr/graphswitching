@@ -1,37 +1,74 @@
 # name	suite	program	arguments	input	expected_unique	focus
+# Sp(6,2)
 sp6-gm	short	gen_all_srgs	63	tests/symplectic-sp6-2.matrix	2	GM enumeration and output
 sp6-gm-packed	short	gen_all_srgs_64vts	63	tests/symplectic-sp6-2.matrix	2	Bit-packed GM comparison
 sp6-graphswitching-gm	short	graphswitching	--vertices 63	tests/symplectic-sp6-2.matrix	2	Dynamic-order GM implementation
+sp6-gm-sym	full	graphswitching	--method gm --vertices 63 --sym	tests/symplectic-sp6-2.matrix	2	Sp(6,2) stabilizer-orbit GM search
 sp6-wqh-legacy-p2	short	gen_all_srgs_wqh_generic	63 2	tests/symplectic-sp6-2.matrix	2	Legacy generic WQH baseline
 sp6-wqh-p2	short	graphswitching	--method wqh --vertices 63 --part-size 2	tests/symplectic-sp6-2.matrix	2	Explicit WQH p=2 comparison
+sp6-wqh-sym-p2	full	graphswitching	--method wqh --vertices 63 --part-size 2 --sym	tests/symplectic-sp6-2.matrix	2	Sp(6,2) partition-orbit representatives
 sp6-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	63 3	tests/symplectic-sp6-2.matrix	0	Legacy tuple-enumeration baseline
 sp6-wqh-p3	full	graphswitching	--method wqh --vertices 63 --part-size 3	tests/symplectic-sp6-2.matrix	0	Sp(6,2) tuple enumeration
-paley73-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	73 3	tests/paley73.matrix	0	Larger legacy tuple-enumeration baseline
-paley73-wqh-p3	full	graphswitching	--method wqh --vertices 73 --part-size 3	tests/paley73.matrix	0	Larger graphswitching tuple enumeration
-gq2-4-wqh-legacy-p5	full	gen_all_srgs_wqh_generic	27 5	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) legacy WQH 5,5,n-10
-gq2-4-wqh-p5	full	graphswitching	--method wqh --vertices 27 --part-size 5	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) WQH 5,5,n-10
-bil223-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	81 3	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) legacy WQH 3,3,n-6
-bil223-wqh-p3	full	graphswitching	--method wqh --vertices 81 --part-size 3	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) WQH 3,3,n-6
-sp4-4-wqh-legacy-p4	extrafull	gen_all_srgs_wqh_generic	85 4	tests/symplectic-sp4-4.matrix	1	Very slow Sp(4,4) legacy WQH 4,4,n-8
-sp4-4-wqh-p4	full	graphswitching	--method wqh --vertices 85 --part-size 4	tests/symplectic-sp4-4.matrix	1	Sp(4,4) WQH 4,4,n-8
-sp6-gm-sym	full	graphswitching	--method gm --vertices 63 --sym	tests/symplectic-sp6-2.matrix	2	Sp(6,2) stabilizer-orbit GM search
-petersen-gm-sym	full	graphswitching	--method gm --vertices 10 --sym	tests/petersen.matrix	1	Petersen setwise-stabilizer GM search
-clebsch-gm-sym	full	graphswitching	--method gm --vertices 16 --sym	tests/clebsch.matrix	1	Clebsch setwise-stabilizer GM search
-gq2-4-gm-sym	full	graphswitching	--method gm --vertices 27 --sym	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) setwise-stabilizer GM search
-sp6-wqh-sym-p2	full	graphswitching	--method wqh --vertices 63 --part-size 2 --sym	tests/symplectic-sp6-2.matrix	2	Sp(6,2) partition-orbit representatives
-gq2-4-wqh-sym-p5	full	graphswitching	--method wqh --vertices 27 --part-size 5 --sym	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) partition-orbit representatives
-bil223-wqh-sym-p3	full	graphswitching	--method wqh --vertices 81 --part-size 3 --sym	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) partition-orbit representatives
-sp4-4-wqh-sym-p4	full	graphswitching	--method wqh --vertices 85 --part-size 4 --sym	tests/symplectic-sp4-4.matrix	1	Sp(4,4) partition-orbit representatives
+paper-sp6-ah10-sym	full	graphswitching	--method ah --part-size 5 --vertices 63 --sym	tests/symplectic-sp6-2.matrix	0	Simoens--Van Overberghe Table 2 Sp(6,2), stabilizer-orbit search
+
+# Sp(6,2) descendants
 sp6-gm2-aut8-gm	full	graphswitching	--method gm --vertices 63	tests/symplectic-sp6-2-gm2-aut8.matrix	252	GM round-2 Sp(6,2) descendant with automorphism group order 8
 sp6-gm2-aut8-gm-sym	full	graphswitching	--method gm --vertices 63 --sym	tests/symplectic-sp6-2-gm2-aut8.matrix	252	Setwise-stabilizer search at automorphism group order 8
 sp6-gm3-aut1-gm	full	graphswitching	--method gm --vertices 63	tests/symplectic-sp6-2-gm3-aut1.matrix	460	GM round-3 asymmetric Sp(6,2) descendant
 sp6-gm3-aut1-gm-sym	full	graphswitching	--method gm --vertices 63 --sym	tests/symplectic-sp6-2-gm3-aut1.matrix	460	Symmetry search on a graph with trivial automorphism group
+
+# Petersen graph
+petersen-gm-sym	full	graphswitching	--method gm --vertices 10 --sym	tests/petersen.matrix	1	Petersen setwise-stabilizer GM search
+
+# Clebsch graph
+clebsch-gm-sym	full	graphswitching	--method gm --vertices 16 --sym	tests/clebsch.matrix	1	Clebsch setwise-stabilizer GM search
+
+# GQ(2,4)
+gq2-4-wqh-legacy-p5	full	gen_all_srgs_wqh_generic	27 5	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) legacy WQH 5,5,n-10
+gq2-4-wqh-p5	full	graphswitching	--method wqh --vertices 27 --part-size 5	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) WQH 5,5,n-10
+gq2-4-gm-sym	full	graphswitching	--method gm --vertices 27 --sym	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) setwise-stabilizer GM search
+gq2-4-wqh-sym-p5	full	graphswitching	--method wqh --vertices 27 --part-size 5 --sym	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) partition-orbit representatives
+
+# Paley(73)
+paley73-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	73 3	tests/paley73.matrix	0	Larger legacy tuple-enumeration baseline
+paley73-wqh-p3	full	graphswitching	--method wqh --vertices 73 --part-size 3	tests/paley73.matrix	0	Larger graphswitching tuple enumeration
+
+# Bil(2,2,3)
+bil223-wqh-legacy-p3	full	gen_all_srgs_wqh_generic	81 3	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) legacy WQH 3,3,n-6
+bil223-wqh-p3	full	graphswitching	--method wqh --vertices 81 --part-size 3	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) WQH 3,3,n-6
+bil223-wqh-sym-p3	full	graphswitching	--method wqh --vertices 81 --part-size 3 --sym	tests/bilinear-forms-bil2-2-3.matrix	2	Bil(2,2,3) partition-orbit representatives
+
+# Sp(4,4)
+sp4-4-wqh-p4	full	graphswitching	--method wqh --vertices 85 --part-size 4	tests/symplectic-sp4-4.matrix	1	Sp(4,4) WQH 4,4,n-8
+sp4-4-wqh-sym-p4	full	graphswitching	--method wqh --vertices 85 --part-size 4 --sym	tests/symplectic-sp4-4.matrix	1	Sp(4,4) partition-orbit representatives
+sp4-4-wqh-legacy-p4	extrafull	gen_all_srgs_wqh_generic	85 4	tests/symplectic-sp4-4.matrix	1	Very slow Sp(4,4) legacy WQH 4,4,n-8
+
+# Remaining Simoens--Van Overberghe Table 2 examples
 paper-cycle20-wqh6-sym	full	graphswitching	--method wqh --part-size 3 --vertices 20 --sym	tests/paper-cycle20.matrix	0	Simoens--Van Overberghe Table 2 Cycle(20), stabilizer-orbit search
 paper-random20-gm6-sym	full	graphswitching	--method gm --part-size 3 --vertices 20 --sym	tests/paper-random20-p05-seed0.matrix	0	Simoens--Van Overberghe Table 2 G(20,1/2), stabilizer-orbit search
 paper-brinkmann-gm44-sym	full	graphswitching	--method gm2 --part-size 2 --vertices 21 --sym	tests/paper-brinkmann.matrix	0	Simoens--Van Overberghe Table 2 Brinkmann graph, stabilizer-orbit search
 paper-complete30-gm-sym	full	graphswitching	--method gm --vertices 30 --sym	tests/paper-complete30.matrix	0	Simoens--Van Overberghe Table 2 Complete(30), stabilizer-orbit search
-paper-sp6-ah10-sym	full	graphswitching	--method ah --part-size 5 --vertices 63 --sym	tests/symplectic-sp6-2.matrix	0	Simoens--Van Overberghe Table 2 Sp(6,2), stabilizer-orbit search
 paper-affine-ah10-sym	full	graphswitching	--method ah --part-size 5 --vertices 64 --sym	tests/paper-affine-orthogonal-6-2-minus.matrix	0	Simoens--Van Overberghe Table 2 VO-(6,2), stabilizer-orbit search
 paper-kneser9-3-wqh6-sym	full	graphswitching	--method wqh --part-size 3 --vertices 84 --sym	tests/paper-kneser9-3.matrix	0	Simoens--Van Overberghe Table 2 Kneser(9,3), stabilizer-orbit search
 paper-grassmann-gm44-sym	full	graphswitching	--method gm2 --part-size 2 --vertices 155 --sym	tests/paper-grassmann2-5-2.matrix	0	Simoens--Van Overberghe Table 2 Grassmann(2,5,2), stabilizer-orbit search
 paper-hamming4-6-fano-sym	full	graphswitching	--method fano --vertices 1296 --sym	tests/paper-hamming4-6.matrix.gz	0	Simoens--Van Overberghe Table 2 Hamming(4,6), stabilizer-orbit search
+
+# Output-producing fixed-method witnesses (ordinary and --sym pairs)
+witness-gm-p3	full	graphswitching	--method gm --part-size 3 --vertices 45	tests/witness-gm6.matrix	2	Planted gm -p 3 witness, ordinary enumeration
+witness-gm-p3-sym	full	graphswitching	--method gm --part-size 3 --vertices 45 --sym	tests/witness-gm6.matrix	2	Planted gm -p 3 witness, stabilizer-orbit enumeration
+witness-gm-p4	full	graphswitching	--method gm --part-size 4 --vertices 32	tests/witness-gm8.matrix	1	Planted gm -p 4 witness, ordinary enumeration
+witness-gm-p4-sym	full	graphswitching	--method gm --part-size 4 --vertices 32 --sym	tests/witness-gm8.matrix	1	Planted gm -p 4 witness, stabilizer-orbit enumeration
+witness-ah-p3	full	graphswitching	--method ah --part-size 3 --vertices 150	tests/witness-ah6.matrix	1	Planted ah -p 3 witness, ordinary enumeration
+witness-ah-p3-sym	full	graphswitching	--method ah --part-size 3 --vertices 150 --sym	tests/witness-ah6.matrix	1	Planted ah -p 3 witness, stabilizer-orbit enumeration
+witness-ah-p5	full	graphswitching	--method ah --part-size 5 --vertices 36	tests/witness-ah10.matrix	1	Planted ah -p 5 witness, ordinary enumeration
+witness-ah-p5-sym	full	graphswitching	--method ah --part-size 5 --vertices 36 --sym	tests/witness-ah10.matrix	1	Planted ah -p 5 witness, stabilizer-orbit enumeration
+witness-gm2-p2	full	graphswitching	--method gm2 --part-size 2 --vertices 40	tests/witness-gm44.matrix	1	Planted gm2 -p 2 witness, ordinary enumeration
+witness-gm2-p2-sym	full	graphswitching	--method gm2 --part-size 2 --vertices 40 --sym	tests/witness-gm44.matrix	1	Planted gm2 -p 2 witness, stabilizer-orbit enumeration
+witness-is5-p3	full	graphswitching	--method is5 --part-size 3 --vertices 70	tests/witness-is6.matrix	1	Planted is5 -p 3 witness, ordinary enumeration
+witness-is5-p3-sym	full	graphswitching	--method is5 --part-size 3 --vertices 70 --sym	tests/witness-is6.matrix	1	Planted is5 -p 3 witness, stabilizer-orbit enumeration
+witness-is3-p4	full	graphswitching	--method is3 --part-size 4 --vertices 40	tests/witness-is8-level3.matrix	1	Planted is3 -p 4 witness, ordinary enumeration
+witness-is3-p4-sym	full	graphswitching	--method is3 --part-size 4 --vertices 40 --sym	tests/witness-is8-level3.matrix	1	Planted is3 -p 4 witness, stabilizer-orbit enumeration
+witness-is5-p4	full	graphswitching	--method is5 --part-size 4 --vertices 30	tests/witness-is8-level5.matrix	1	Planted is5 -p 4 witness, ordinary enumeration
+witness-is5-p4-sym	full	graphswitching	--method is5 --part-size 4 --vertices 30 --sym	tests/witness-is8-level5.matrix	1	Planted is5 -p 4 witness, stabilizer-orbit enumeration
+witness-fano	full	graphswitching	--method fano --vertices 75	tests/witness-fano.matrix	1	Planted Fano witness, ordinary enumeration
+witness-fano-sym	full	graphswitching	--method fano --vertices 75 --sym	tests/witness-fano.matrix	1	Planted Fano witness, stabilizer-orbit enumeration

@@ -279,8 +279,8 @@ classes, and report wall, user, and system time.
 
 The default `short` suite is designed to finish within one minute on the
 reference machine. `full` adds every reasonably quick ordinary, symmetry,
-and paper case. `extrafull` runs every case, including the roughly
-eleven-minute legacy Sp(4,4) baseline:
+paper, and nonisomorphic-witness case. `extrafull` runs every case,
+including the roughly eleven-minute legacy Sp(4,4) baseline:
 
     make benchmark
     make benchmark BENCHMARK_SUITE=full BENCHMARK_RUNS=3
