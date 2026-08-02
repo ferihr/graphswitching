@@ -5,21 +5,9 @@ which switching operations are emitted, but preserves the resulting graph
 isomorphism classes. It is not a final graph-isomorphism filter: distinct
 retained operations can still produce isomorphic graphs.
 
-## Attribution and scope
-
-The fixed switching matrices and irreducible switching-subgraph catalogues
-are based on Robin Simoens and Steven Van Overberghe, "An algorithm to find
-cospectral mates", and their SageMath reference implementation:
-
-https://github.com/robinsimoens/implementing-switching-methods
-
-The data were adapted with the authors' permission and re-expressed as
-rational numerator matrices and compact edge masks. The search algorithm is
-different. Their implementation uses a general canonical-construction path
-on matchings between the input graph and a switching template. This
-implementation computes `Aut(G)` once and uses method-specific stabilizer
-recursions. It does not canonically label an auxiliary graph at every search
-node.
+The mathematical provenance of the catalogue methods and a comparison with
+the reference search methodology are documented separately in
+`docs/methodology.md`.
 
 ## Common setup
 
@@ -146,29 +134,3 @@ FIXED-SYM(G, Q, catalogue):
 Ordinary fixed-method enumeration uses the same template order,
 pair-compatibility checks, block-feasibility pruning, and transformation,
 but tries every eligible graph vertex instead of one per stabilizer orbit.
-
-## Differences from the Simoens--Van Overberghe work
-
-The implementation deliberately keeps their method data while changing the
-search organization:
-
-- Their general construction treats a partial switching set as a matching
-  between `G` and a template and uses canonical deletion in a colored
-  auxiliary graph. Here, nauty is called once for `Aut(G)`, followed by
-  inexpensive point or set stabilizers.
-- GM and WQH keep specialized candidate masks, delayed regularity tests, and
-  family-specific recursion instead of being expressed through one generic
-  matching engine.
-- Fixed methods traverse each catalogue template in a fixed labelled order.
-  This is cheaper, but template automorphisms can leave duplicate switching
-  operations. The guarantee is preservation of output isomorphism classes,
-  not one operation per combined graph-template orbit.
-- The public interface is family-based: the method is selected with
-  `--method`, and `--part-size` supplies the parameter.
-- The reference implementation is systematic across switching methods. This
-  implementation favors the lower overhead of method-aware stabilizer
-  search because that was faster on the benchmark graphs.
-
-The practical tradeoff is therefore explicit: less general canonical
-machinery and potentially more duplicate operations, in exchange for much
-lower per-node overhead on the supported methods.

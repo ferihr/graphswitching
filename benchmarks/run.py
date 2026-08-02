@@ -68,13 +68,12 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--suite",
-        choices=("quick", "full", "extrafull", "symmetry", "paper"),
-        default="quick",
+        choices=("short", "full", "extrafull"),
+        default="short",
         help=(
-            "quick runs Sp(6,2); full adds the extended WQH cases; "
-            "extrafull also runs the very slow legacy Sp(4,4) case; "
-            "symmetry runs the nauty-enabled orbit-representative cases; "
-            "paper runs --sym on the Simoens--Van Overberghe examples"
+            "short is designed to finish within one minute; full runs all "
+            "reasonably quick cases; extrafull runs every case, including "
+            "the very slow legacy Sp(4,4) baseline"
         ),
     )
     parser.add_argument(
@@ -108,12 +107,10 @@ def read_manifest() -> list[BenchmarkCase]:
                     f"{MANIFEST}:{line_number}: expected 7 tab-separated fields"
                 )
             name, suite, program, arguments, input_path, expected, focus = row
-            if suite not in (
-                "quick", "full", "extrafull", "symmetry", "paper"
-            ):
+            if suite not in ("short", "full", "extrafull"):
                 raise ValueError(
-                    f"{MANIFEST}:{line_number}: suite must be quick, full, "
-                    "extrafull, symmetry, or paper"
+                    f"{MANIFEST}:{line_number}: suite must be short, full, "
+                    "or extrafull"
                 )
             cases.append(
                 BenchmarkCase(
@@ -172,19 +169,11 @@ def select_cases(
                 f"available cases: {choices}"
             )
         return [by_name[name] for name in requested]
-    if suite == "quick":
-        return [case for case in cases if case.suite == "quick"]
-    if suite == "full":
-        return [
-            case for case in cases if case.suite in ("quick", "full")
-        ]
-    if suite == "extrafull":
-        return [
-            case
-            for case in cases
-            if case.suite in ("quick", "full", "extrafull")
-        ]
-    return [case for case in cases if case.suite == suite]
+    levels = {"short": 0, "full": 1, "extrafull": 2}
+    return [
+        case for case in cases
+        if levels[case.suite] <= levels[suite]
+    ]
 
 
 def find_command(command: str) -> str | None:

@@ -16,7 +16,7 @@ Requirements
   - nauty and Traces command-line tools
   - the standard sort and wc utilities
 
-Build and run the quick suite:
+Build and run the short suite:
 
     make benchmark
 
@@ -38,81 +38,21 @@ For paths or nonstandard names, set both command overrides:
 
 Suites and cases
 
-The default quick suite compares the two original GM programs, the default
-GM method in graphswitching, and both generic WQH implementations on
-Sp(6,2). This reproduces and extends the end-to-end benchmark in the project
-discussion.
+There are three cumulative suites:
 
-The full suite also includes:
+  - `short` is the default Sp(6,2) comparison and is designed to finish
+    within one minute on the reference machine.
+  - `full` adds every reasonably quick case: extended ordinary WQH and GM,
+    all `--sym` regressions, and the nine paper examples.
+  - `extrafull` runs every case. It adds the legacy Sp(4,4) WQH baseline,
+    which takes roughly 11 minutes by itself in the reference environment.
 
-  - p=3 on Sp(6,2) and Paley(73). These emit no switched matrices, so
-    their running time is dominated by candidate-tuple enumeration.
-
-  - WQH 5,5,n-10 on the point graph of GQ(2,4), an SRG(27,10,1,5).
-    This small regression case produces 216 raw switched matrices in one
-    isomorphism class.
-
-  - WQH 3,3,n-6 on the bilinear forms graph Bil(2,2,3), an
-    SRG(81,32,13,12). One switching step is expected to produce two
-    isomorphism classes.
-
-  - WQH 4,4,n-8 on Sp(4,4), an SRG(85,20,3,5), using the current
-    graphswitching implementation. One switching step is expected to
-    produce one isomorphism class.
-
-Bil(2,2,3) is run through both the legacy generic program and
-graphswitching. The Sp(4,4) legacy case is excluded from full because it is
-especially slow, taking roughly 11 minutes in the reference environment.
-Select extrafull or name sp4-4-wqh-legacy-p4 explicitly to include it. The
-current Sp(4,4) case is still substantially longer-running than the default
-quick suite.
+The `full` and `extrafull` suites include `--sym` cases, so graphswitching
+must be built with nauty support as described in INSTALL.
 
     make benchmark BENCHMARK_SUITE=full
     make benchmark BENCHMARK_SUITE=full BENCHMARK_RUNS=3
     make benchmark BENCHMARK_SUITE=extrafull
-
-The separate symmetry suite runs graphswitching --sym for GM on Petersen,
-Clebsch, GQ(2,4), and Sp(6,2); it also runs WQH with p=2 on Sp(6,2), p=3 on
-Bil(2,2,3), p=4 on Sp(4,4), and p=5 on GQ(2,4). Two additional GM inputs are
-canonical graphs obtained after two and three rounds of switching from
-Sp(6,2). Their automorphism groups have orders 8 and 1, respectively. Build
-with nauty support as described in INSTALL, then run:
-
-    make benchmark BENCHMARK_SUITE=symmetry
-    make check-symmetry
-
-These cases prune the search through stabilizer orbits, then use canonical
-labelling to verify that the expected output isomorphism classes are
-retained. They are excluded from quick and full so those suites continue to
-work without the nauty library.
-
-The `paper` suite runs --sym on Table 2 of Simoens and Van Overberghe, "An
-algorithm to find cospectral mates". The method data and benchmark examples
-are based on their reference implementation:
-
-    https://github.com/robinsimoens/implementing-switching-methods
-
-  - Cycle(20) with WQH6;
-  - G(20,1/2) with GM6;
-  - the Brinkmann graph with GM4,4;
-  - Complete(30) with GM4;
-  - Sp(6,2) and VO-(6,2) with AH10;
-  - Kneser(9,3) with WQH6;
-  - Grassmann J_2(5,2) with GM4,4; and
-  - Hamming(4,6) with Fano switching.
-
-The paper does not state a seed for its random graph. The stored benchmark
-uses Python's deterministic `random.Random(0)` construction and records the
-seed in the fixture name. Run the suite with:
-
-    make benchmark BENCHMARK_SUITE=paper
-    make benchmark BENCHMARK_SUITE=paper BENCHMARK_RUNS=3
-
-These examples emit no changed labelled matrices in this implementation, so
-the suite measures complete switching-set iteration. Catalogue correctness
-is checked separately by `tests/check_fixed_methods.py`, which constructs a
-guaranteed nontrivial example for every method and requires ordinary and
---sym enumeration to produce identical canonical class sets.
 
 List the cases or run only named cases:
 
@@ -121,7 +61,7 @@ List the cases or run only named cases:
     python3 benchmarks/run.py --runs 5 sp6-gm sp6-gm-packed
     python3 benchmarks/run.py gq2-4-wqh-p5 bil223-wqh-p3 sp4-4-wqh-p4
 
-The case definitions live in cases.tsv. The quick suite currently expects
+The case definitions live in cases.tsv. The short suite currently expects
 two isomorphism classes from each Sp(6,2) benchmark. The
 tuple-enumeration-only p=3 cases expect zero. The GQ(2,4) case expects one
 output class. The Bil(2,2,3) and Sp(4,4) counts agree with the one-step

@@ -76,7 +76,7 @@ static void print_help(FILE *stream, const char *program)
                 "inferring the order\n");
         fprintf(stream,
                 "  -p P, --part-size=P   set the method parameter P "
-                "(default: 2)\n");
+                "(see the method table below)\n");
         fprintf(stream,
                 "      --sym              use input-graph symmetries to "
                 "search switching orbit representatives\n"
@@ -96,30 +96,22 @@ static void print_help(FILE *stream, const char *program)
                 "  -V, --version          display version information and "
                 "exit\n\n");
 
-        fprintf(stream, "Switching methods:\n");
         fprintf(stream,
-                "  gm   Godsil--McKay switching: P=2,3,4 selects "
-                "GM4, GM6, GM8 (default: P=2).\n");
+                "Switching methods (METHOD, accepted P, catalogue name):\n");
         fprintf(stream,
-                "       --sym uses stabilizer orbits.\n");
-        fprintf(stream,
-                "  wqh  WQH switching with partition sizes P,P,N-2P. "
-                "Requires 2P <= N.\n"
-                "       --sym uses stabilizer orbits to prune C1 and C2 "
-                "construction.\n"
-                "       Omitted results are isomorphic to emitted "
-                "ones.\n\n");
-        fprintf(stream,
-                "  Other fixed families (irreducible switching "
-                "subgraphs):\n"
-                "       ah:   P=3,5 selects AH6, AH10.\n"
-                "       gm2:  P=2 selects GM4,4.\n"
-                "       is3:  P=4 selects IS8(level 3).\n"
-                "       is5:  P=3,4 selects IS6, IS8(level 5).\n"
-                "       fano: selects Fano switching; --part-size is not "
-                "valid.\n"
-                "       Each supports ordinary and --sym stabilizer-orbit "
-                "search.\n\n");
+                "  gm    P=2 (default),3,4   GM4, GM6, GM8\n"
+                "  wqh   P=1,...,8           WQH(P,P,N-2P); default P=2\n"
+                "  ah    P=3,5               AH6, AH10\n"
+                "  gm2   P=2 (default)       GM4,4\n"
+                "  is3   P=4                 IS8(level 3)\n"
+                "  is5   P=3,4               IS6, IS8(level 5)\n"
+                "  fano  no P                Fano\n\n"
+                "  --part-size is required for ah, is3, and is5, and is "
+                "invalid for fano.\n"
+                "  WQH also requires 2P <= N. Every method supports "
+                "ordinary and --sym search.\n"
+                "  --sym computes Aut(G) once and searches stabilizer-"
+                "orbit representatives.\n\n");
 
         fprintf(stream, "Input:\n");
         fprintf(stream,
