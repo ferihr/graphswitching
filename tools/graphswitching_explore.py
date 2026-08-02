@@ -23,7 +23,16 @@ from typing import Iterable, Sequence
 
 VERSION = "@GRAPHSWITCHING_VERSION@"
 GRAPH6_HEADER = ">>graph6<<"
-MAX_VERTICES = 448
+MAX_VERTICES = 1536
+SWITCHING_METHODS = (
+    "gm",
+    "wqh",
+    "ah",
+    "gm2",
+    "is3",
+    "is5",
+    "fano",
+)
 AUTOMORPHISM_SIZE_PATTERN = re.compile(r"grpsize=([^;]+);")
 AUTOMORPHISM_BATCH_SIZE = 64
 
@@ -49,7 +58,7 @@ class Switching:
 
     def arguments(self) -> list[str]:
         arguments = ["--method", self.method]
-        if self.method == "wqh":
+        if self.method != "fano":
             arguments.extend(("--part-size", str(self.part_size)))
         if self.symmetry:
             arguments.append("--sym")
@@ -196,7 +205,7 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
     parser.add_argument(
         "-m",
         "--method",
-        choices=("gm", "wqh"),
+        choices=SWITCHING_METHODS,
         default="gm",
         help="switching method passed to graphswitching (default: gm)",
     )
@@ -204,9 +213,9 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
         "-p",
         "--part-size",
         type=positive_integer,
-        default=2,
+        default=None,
         metavar="P",
-        help="WQH part size passed to graphswitching (default: 2)",
+        help="method parameter passed to graphswitching (gm/wqh default: 2)",
     )
     parser.add_argument(
         "--sym",
@@ -273,6 +282,34 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
         version=f"%(prog)s {VERSION}",
     )
     parsed = parser.parse_args(arguments)
+
+    supplied_parameter = parsed.part_size
+    if supplied_parameter is None:
+        if parsed.method in ("gm", "wqh", "gm2", "fano"):
+            parsed.part_size = 2
+        else:
+            parser.error(f"--method {parsed.method} requires --part-size")
+    supported_parameters = {
+        "gm": (2, 3, 4),
+        "ah": (3, 5),
+        "gm2": (2,),
+        "is3": (4,),
+        "is5": (3, 4),
+    }
+    if parsed.method == "fano" and supplied_parameter is not None:
+        parser.error("--part-size is not valid with --method fano")
+    if (
+        parsed.method in supported_parameters
+        and parsed.part_size not in supported_parameters[parsed.method]
+    ):
+        choices = ", ".join(
+            str(value) for value in supported_parameters[parsed.method]
+        )
+        parser.error(
+            f"--method {parsed.method} supports --part-size {choices}"
+        )
+    if parsed.method == "wqh" and parsed.part_size > 8:
+        parser.error("--method wqh supports --part-size at most 8")
 
     if parsed.aut_size is not None and (
         parsed.min_aut_size is not None or parsed.max_aut_size is not None

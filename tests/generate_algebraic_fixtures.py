@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import itertools
+import random
 import sys
 from pathlib import Path
 from typing import Callable, Sequence, TypeVar
@@ -145,7 +147,117 @@ def generalized_quadrangle_gq2_4() -> Matrix:
     )
 
 
-def strongly_regular_parameters(matrix: Matrix) -> tuple[int, int, int, int]:
+def cycle_graph(order: int) -> Matrix:
+    return adjacency_matrix(
+        list(range(order)),
+        lambda left, right: (left - right) % order in (1, order - 1),
+    )
+
+
+def random_graph(order: int, probability: float, seed: int) -> Matrix:
+    generator = random.Random(seed)
+    matrix = [[0] * order for _ in range(order)]
+    for left in range(order):
+        for right in range(left + 1, order):
+            if generator.random() < probability:
+                matrix[left][right] = 1
+                matrix[right][left] = 1
+    return matrix
+
+
+def brinkmann_graph() -> Matrix:
+    """Return Brinkmann's 4-regular graph on 21 vertices.
+
+    The adjacency list is the GPL-compatible construction distributed by
+    SageMath's ``graphs.BrinkmannGraph``.
+    """
+
+    upper_neighbors = {
+        0: [2, 5, 7, 13],
+        1: [3, 6, 7, 8],
+        2: [4, 8, 9],
+        3: [5, 9, 10],
+        4: [6, 10, 11],
+        5: [11, 12],
+        6: [12, 13],
+        7: [15, 20],
+        8: [14, 16],
+        9: [15, 17],
+        10: [16, 18],
+        11: [17, 19],
+        12: [18, 20],
+        13: [14, 19],
+        14: [17, 18],
+        15: [18, 19],
+        16: [19, 20],
+        17: [20],
+    }
+    matrix = [[0] * 21 for _ in range(21)]
+    for left, neighbors in upper_neighbors.items():
+        for right in neighbors:
+            matrix[left][right] = 1
+            matrix[right][left] = 1
+    return matrix
+
+
+def complete_graph(order: int) -> Matrix:
+    return adjacency_matrix(
+        list(range(order)), lambda left, right: left != right
+    )
+
+
+def affine_orthogonal_polar_graph_6_2_minus() -> Matrix:
+    """Return VO^-(6,2) on the 64 vectors of GF(2)^6."""
+
+    def quadratic_form(vector: int) -> int:
+        coordinates = [(vector >> index) & 1 for index in range(6)]
+        return (
+            coordinates[0] * coordinates[1]
+            ^ coordinates[2] * coordinates[3]
+            ^ coordinates[4]
+            ^ coordinates[4] * coordinates[5]
+            ^ coordinates[5]
+        )
+
+    return adjacency_matrix(
+        list(range(1 << 6)),
+        lambda left, right: quadratic_form(left ^ right) == 0,
+    )
+
+
+def kneser_graph(order: int, subset_size: int) -> Matrix:
+    vertices = list(itertools.combinations(range(order), subset_size))
+    return adjacency_matrix(
+        vertices,
+        lambda left, right: not set(left).intersection(right),
+    )
+
+
+def grassmann_graph_2_5_2() -> Matrix:
+    """Return the binary Grassmann graph J_2(5,2)."""
+
+    subspaces = {
+        tuple(sorted((left, right, left ^ right)))
+        for left in range(1, 1 << 5)
+        for right in range(left + 1, 1 << 5)
+        if left != right
+    }
+    vertices = sorted(subspaces)
+    return adjacency_matrix(
+        vertices,
+        lambda left, right: bool(set(left).intersection(right)),
+    )
+
+
+def hamming_graph(dimension: int, alphabet_size: int) -> Matrix:
+    vertices = list(itertools.product(range(alphabet_size), repeat=dimension))
+    return adjacency_matrix(
+        vertices,
+        lambda left, right: sum(a != b for a, b in zip(left, right)) == 1,
+    )
+
+
+def validate_graph(matrix: Matrix) -> tuple[int, tuple[int, ...]]:
     order = len(matrix)
     if any(len(row) != order for row in matrix):
         raise ValueError("matrix is not square")
@@ -154,14 +266,19 @@ def strongly_regular_parameters(matrix: Matrix) -> tuple[int, int, int, int]:
     if any(
         matrix[row][column] != matrix[column][row]
         for row in range(order)
-        for column in range(order)
+        for column in range(row + 1, order)
     ):
         raise ValueError("matrix is not symmetric")
+    if any(entry not in (0, 1) for row in matrix for entry in row):
+        raise ValueError("matrix contains a non-binary entry")
+    return order, tuple(sorted({sum(row) for row in matrix}))
 
-    degrees = {sum(row) for row in matrix}
+
+def strongly_regular_parameters(matrix: Matrix) -> tuple[int, int, int, int]:
+    order, degrees = validate_graph(matrix)
     if len(degrees) != 1:
         raise ValueError("graph is not regular")
-    degree = degrees.pop()
+    degree = degrees[0]
     adjacent_common = set()
     nonadjacent_common = set()
     for left in range(order):
@@ -211,6 +328,37 @@ def fixtures() -> dict[str, tuple[Matrix, tuple[int, int, int, int]]]:
     }
 
 
+def paper_fixtures() -> dict[str, tuple[Matrix, int, tuple[int, ...]]]:
+    """Return the examples from Table 2 of the Simoens--Van Overberghe paper.
+
+    The preprint does not specify the random seed for G(20, 1/2), so this
+    fixture fixes seed 0 for repeatability.
+    """
+
+    return {
+        "paper-cycle20.matrix": (cycle_graph(20), 20, (2,)),
+        "paper-random20-p05-seed0.matrix": (
+            random_graph(20, 0.5, 0),
+            20,
+            (4, 6, 7, 8, 10, 11, 12, 13, 14),
+        ),
+        "paper-brinkmann.matrix": (brinkmann_graph(), 21, (4,)),
+        "paper-complete30.matrix": (complete_graph(30), 30, (29,)),
+        "paper-affine-orthogonal-6-2-minus.matrix": (
+            affine_orthogonal_polar_graph_6_2_minus(),
+            64,
+            (27,),
+        ),
+        "paper-kneser9-3.matrix": (kneser_graph(9, 3), 84, (20,)),
+        "paper-grassmann2-5-2.matrix": (
+            grassmann_graph_2_5_2(),
+            155,
+            (42,),
+        ),
+        "paper-hamming4-6.matrix.gz": (hamming_graph(4, 6), 1296, (20,)),
+    }
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="generate or validate the algebraic graph fixtures"
@@ -252,6 +400,51 @@ def main() -> int:
         else:
             print(
                 f"Checked {name} as SRG{actual_parameters}: ok"
+            )
+
+    for name, (matrix, expected_order, expected_degrees) in (
+        paper_fixtures().items()
+    ):
+        actual_order, actual_degrees = validate_graph(matrix)
+        if actual_order != expected_order or actual_degrees != expected_degrees:
+            print(
+                f"{name}: expected order/degrees "
+                f"{(expected_order, expected_degrees)}, generated "
+                f"{(actual_order, actual_degrees)}",
+                file=sys.stderr,
+            )
+            failed = True
+            continue
+
+        path = ROOT / name
+        generated = matrix_text(matrix)
+        if arguments.write:
+            if path.suffix == ".gz":
+                path.write_bytes(
+                    gzip.compress(
+                        generated.encode("ascii"),
+                        compresslevel=9,
+                        mtime=0,
+                    )
+                )
+            else:
+                path.write_text(generated, encoding="ascii")
+            print(f"wrote {path.relative_to(ROOT.parent)}")
+        elif not path.is_file() or (
+            gzip.decompress(path.read_bytes()).decode("ascii")
+            if path.suffix == ".gz"
+            else path.read_text(encoding="ascii")
+        ) != generated:
+            print(
+                f"{path.relative_to(ROOT.parent)} is stale; "
+                "run this script with --write",
+                file=sys.stderr,
+            )
+            failed = True
+        else:
+            print(
+                f"Checked {name} with order/degrees "
+                f"{(actual_order, actual_degrees)}: ok"
             )
     return int(failed)
 

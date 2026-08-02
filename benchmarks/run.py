@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import os
 import resource
 import shlex
@@ -12,6 +13,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -66,12 +68,12 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--suite",
-        choices=("quick", "full", "extrafull", "symmetry"),
-        default="quick",
+        choices=("short", "full", "extrafull"),
+        default="short",
         help=(
-            "quick runs Sp(6,2); full adds the extended WQH cases; "
-            "extrafull also runs the very slow legacy Sp(4,4) case; "
-            "symmetry runs the nauty-enabled orbit-representative cases"
+            "short is designed to finish within one minute; full runs all "
+            "reasonably quick cases; extrafull runs every case, including "
+            "the very slow legacy Sp(4,4) baseline"
         ),
     )
     parser.add_argument(
@@ -105,10 +107,10 @@ def read_manifest() -> list[BenchmarkCase]:
                     f"{MANIFEST}:{line_number}: expected 7 tab-separated fields"
                 )
             name, suite, program, arguments, input_path, expected, focus = row
-            if suite not in ("quick", "full", "extrafull", "symmetry"):
+            if suite not in ("short", "full", "extrafull"):
                 raise ValueError(
-                    f"{MANIFEST}:{line_number}: suite must be quick, full, "
-                    "extrafull, or symmetry"
+                    f"{MANIFEST}:{line_number}: suite must be short, full, "
+                    "or extrafull"
                 )
             cases.append(
                 BenchmarkCase(
@@ -167,19 +169,11 @@ def select_cases(
                 f"available cases: {choices}"
             )
         return [by_name[name] for name in requested]
-    if suite == "quick":
-        return [case for case in cases if case.suite == "quick"]
-    if suite == "full":
-        return [
-            case for case in cases if case.suite in ("quick", "full")
-        ]
-    if suite == "extrafull":
-        return [
-            case
-            for case in cases
-            if case.suite in ("quick", "full", "extrafull")
-        ]
-    return [case for case in cases if case.suite == "symmetry"]
+    levels = {"short": 0, "full": 1, "extrafull": 2}
+    return [
+        case for case in cases
+        if levels[case.suite] <= levels[suite]
+    ]
 
 
 def find_command(command: str) -> str | None:
@@ -266,7 +260,13 @@ def run_pipeline(
     usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
     started = time.perf_counter()
 
-    with input_path.open("rb") as graph_input:
+    if input_path.suffix == ".gz":
+        graph_input_context = tempfile.TemporaryFile()
+        graph_input_context.write(gzip.decompress(input_path.read_bytes()))
+        graph_input_context.seek(0)
+    else:
+        graph_input_context = input_path.open("rb")
+    with graph_input_context as graph_input:
         previous_stdout = None
         for index, command in enumerate(commands):
             standard_input = graph_input if index == 0 else previous_stdout

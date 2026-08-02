@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import os
 import subprocess
 import sys
@@ -61,11 +63,35 @@ class Graph6Tests(unittest.TestCase):
         gm = EXPLORE.Switching("gm", 2, True)
         wqh = EXPLORE.Switching("wqh", 3, True)
 
-        self.assertEqual(gm.arguments(), ["--method", "gm", "--sym"])
+        self.assertEqual(
+            gm.arguments(),
+            ["--method", "gm", "--part-size", "2", "--sym"],
+        )
         self.assertEqual(
             wqh.arguments(),
             ["--method", "wqh", "--part-size", "3", "--sym"],
         )
+
+    def test_method_parameters_are_validated(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                EXPLORE.parse_arguments(
+                    ["--output-dir", "out", "--method", "ah"]
+                )
+            with self.assertRaises(SystemExit):
+                EXPLORE.parse_arguments(
+                    [
+                        "--output-dir", "out", "--method", "fano",
+                        "--part-size", "2",
+                    ]
+                )
+        parsed = EXPLORE.parse_arguments(
+            [
+                "--output-dir", "out", "--method", "is5",
+                "--part-size", "4",
+            ]
+        )
+        self.assertEqual(parsed.part_size, 4)
 
     def test_rejects_nonfinite_time_limit(self) -> None:
         with self.assertRaises(EXPLORE.argparse.ArgumentTypeError):

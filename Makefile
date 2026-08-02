@@ -57,7 +57,7 @@ INSTALL ?= install
 INSTALL_PROGRAM ?= $(INSTALL) -m 0755
 PYTHON ?= python3
 
-BENCHMARK_SUITE ?= quick
+BENCHMARK_SUITE ?= short
 BENCHMARK_RUNS ?= 1
 BENCHMARK_CASES ?=
 
@@ -66,7 +66,8 @@ PROJECT_VERSION := $(shell sed -n '1p' $(VERSION_FILE))
 VERSION_CPPFLAGS := -DGRAPHSWITCHING_VERSION=\"$(PROJECT_VERSION)\"
 SOURCE_DIR := code
 INCLUDE_DIR := include
-LIBRARY_SOURCE := src/graphswitching.c
+LIBRARY_SOURCES := src/graphswitching.c src/switching_methods.c
+INTERNAL_HEADERS := src/switching_methods.h
 TOOL_SOURCE := tools/graphswitching.c
 EXPLORE_SOURCE := tools/graphswitching_explore.py
 LEGACY_PROGRAMS := \
@@ -89,12 +90,12 @@ all: $(PROGRAMS)
 $(LEGACY_PROGRAMS): %: $(SOURCE_DIR)/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
 
-graphswitching: FORCE $(TOOL_SOURCE) $(LIBRARY_SOURCE) \
-		$(INCLUDE_DIR)/graphswitching.h $(VERSION_FILE)
+graphswitching: FORCE $(TOOL_SOURCE) $(LIBRARY_SOURCES) \
+		$(INCLUDE_DIR)/graphswitching.h $(INTERNAL_HEADERS) $(VERSION_FILE)
 	$(CC) $(CPPFLAGS) $(GRAPHSWITCHING_CPPFLAGS) \
 		$(VERSION_CPPFLAGS) -I$(INCLUDE_DIR) \
 		$(CFLAGS) $(WARNFLAGS) \
-		$(TOOL_SOURCE) $(LIBRARY_SOURCE) $(LDFLAGS) \
+		$(TOOL_SOURCE) $(LIBRARY_SOURCES) $(LDFLAGS) \
 		$(LDLIBS) $(GRAPHSWITCHING_LDLIBS) -o $@
 
 graphswitching-explore: $(EXPLORE_SOURCE) $(VERSION_FILE)
@@ -125,9 +126,11 @@ check-symmetry: graphswitching
 		sp4-4-wqh-sym-p4 \
 		sp6-gm2-aut8-gm-sym \
 		sp6-gm3-aut1-gm-sym
+	$(PYTHON) tests/check_fixed_methods.py
 
 check: $(PROGRAMS) $(TEST_CASES)
 	$(PYTHON) tests/generate_algebraic_fixtures.py
+	$(PYTHON) tests/check_fixed_methods.py --data-only
 	PYTHONDONTWRITEBYTECODE=1 \
 		$(PYTHON) tests/test_graphswitching_explore.py
 	@for program in $(PROGRAMS); do \
@@ -180,8 +183,12 @@ check: $(PROGRAMS) $(TEST_CASES)
 		--output /dev/null; \
 	if ./graphswitching 10 2 < tests/petersen.matrix \
 		> /dev/null 2>&1; then exit 1; fi; \
-	if ./graphswitching --part-size 2 < tests/petersen.matrix \
+	if ./graphswitching --method fano --part-size 2 \
+		< tests/petersen.matrix \
 		> /dev/null 2>&1; then exit 1; fi; \
+	for method in gm wqh ah gm2 is3 is5 fano; do \
+		printf '%s\n' "$$help" | grep -q -- "$$method"; \
+	done; \
 	if test "$(NAUTY_ENABLED)" = 1; then \
 		./graphswitching --method gm --sym \
 			< tests/petersen.matrix > /dev/null; \
