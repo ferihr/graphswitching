@@ -14,13 +14,11 @@ Programs
   -------------------------- ---------------------------------------- ----------------------------------------
   graphswitching             GM, WQH, and fixed catalogue methods     Runtime options; recommended interface
   graphswitching-explore     Repeated switching rounds                graph6 input; parallel runtime options
-  gen_all_srgs               GM with parts of size 4,n-4              Set VTS in the source
-  gen_all_srgs_64vts         Bit-packed GM with parts of size 4,n-4   Set VTS; limited by the width of INTT
-  gen_all_srgs_wqh6          WQH with parts of size 3,3,n-6           Set VTS in the source
-  gen_all_srgs_wqh_generic   WQH with parts of size p,p,n-2p          Original standalone implementation
 
 graphswitching supports at most 1536 vertices. Its WQH method has a maximum
-part size of 8.
+part size of 8. There are also four legacy programs gen_all_srgs,
+gen_all_srgs_64vts, gen_all_srgs_wqh6, gen_all_srgs_wqh_generic which can be
+ignored.
 
 Quick start
 
@@ -41,19 +39,13 @@ about configuring the specialized programs.
 
 Input
 
-Each program reads an adjacency matrix from standard input. It consumes
+The program reads an adjacency matrix from standard input. It consumes
 exactly n * n occurrences of 0 or 1; all other characters, including
 spaces and newlines, are ignored. For example, a matrix may be written with
 one row per line.
 
 The programs expect an adjacency matrix for a regular, simple, undirected
 graph. They do not comprehensively validate those properties.
-
-For the three specialized programs, n is the compile-time VTS value in
-the corresponding source file. gen_all_srgs_wqh_generic takes n and p
-as positional arguments.
-
-    gen_all_srgs_wqh_generic n p
 
 graphswitching infers n by counting the binary entries of a square input
 matrix. It also accepts a leading n=<number of vertices> line. Use
@@ -308,6 +300,8 @@ Background
 Examples, data sets, and more context about the strongly regular graph
 computations are available on
 Ferdinand Ihringer's SRG page (https://ihringer.org/srgs.php).
+The more fancy switchings are based on the work by Simoens and
+Van Overberghe ( https://github.com/robinsimoens/implementing-switching-methods ).
 
 License
 
