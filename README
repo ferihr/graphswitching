@@ -265,8 +265,8 @@ example:
     make clean
     make CFLAGS="-O2"
 
-To compare several conservative GCC optimization profiles on the current
-computer and rebuild with the fastest one:
+To compare several conservative GCC optimization profiles across a dedicated
+graphswitching tuning category and rebuild it with the fastest one:
 
     make tune-gcc
 
