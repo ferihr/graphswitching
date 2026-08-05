@@ -17,6 +17,23 @@ import run as benchmark
 
 
 ROOT = Path(__file__).resolve().parent.parent
+PROGRAM = "graphswitching"
+TUNING_CASES = (
+    "sp6-graphswitching-gm",
+    "sp6-wqh-p2",
+    "sp6-gm3-aut1-gm-sym",
+    "bil223-wqh-p3",
+    "sp4-4-wqh-sym-p4",
+    "witness-gm-p3",
+    "witness-gm-p4-sym",
+    "witness-ah-p3",
+    "witness-ah-p5-sym",
+    "witness-gm2-p2",
+    "witness-is5-p3-sym",
+    "witness-is3-p4",
+    "witness-is5-p4-sym",
+    "witness-fano",
+)
 
 
 @dataclass(frozen=True)
@@ -52,11 +69,16 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "cases", nargs="*", metavar="CASE",
-        help="named benchmark cases; when supplied, --suite is ignored",
+        help=(
+            "named graphswitching benchmark cases; when supplied, --suite "
+            "is ignored"
+        ),
     )
     parser.add_argument(
-        "--suite", choices=("short", "full", "extrafull"), default="short",
-        help="benchmark suite to use (default: short)",
+        "--suite",
+        choices=("tuning", "short", "full", "extrafull"),
+        default="tuning",
+        help="benchmark category to use (default: tuning)",
     )
     parser.add_argument(
         "--runs", type=benchmark.positive_integer, default=3,
@@ -80,9 +102,32 @@ def command_from_text(text: str, description: str) -> list[str]:
     return command
 
 
+def select_graphswitching_cases(
+    arguments: argparse.Namespace,
+) -> list[benchmark.BenchmarkCase]:
+    manifest = benchmark.read_manifest()
+    requested = (
+        arguments.cases
+        if arguments.cases or arguments.suite != "tuning"
+        else TUNING_CASES
+    )
+    selected = benchmark.select_cases(
+        manifest, requested, arguments.suite
+    )
+    unsupported = [case.name for case in selected if case.program != PROGRAM]
+    if (arguments.cases or arguments.suite == "tuning") and unsupported:
+        raise ValueError(
+            "GCC tuning only supports graphswitching cases; unsupported: "
+            + ", ".join(unsupported)
+        )
+    cases = [case for case in selected if case.program == PROGRAM]
+    if not cases:
+        raise ValueError("the selection contains no graphswitching cases")
+    return cases
+
+
 def build(
     make: list[str], compiler: list[str], profile: Profile,
-    programs: list[str],
 ) -> None:
     with tempfile.TemporaryDirectory(
         prefix=".graphswitching-gcc-", dir=ROOT
@@ -91,7 +136,7 @@ def build(
         environment["TMPDIR"] = temp_dir
         subprocess.run(
             [
-                *make, "-B", "-s", "--no-print-directory", *programs,
+                *make, "-B", "-s", "--no-print-directory", PROGRAM,
                 f"CC={shlex.join(compiler)}", f"CFLAGS={profile.cflags}",
             ],
             cwd=ROOT,
@@ -105,9 +150,7 @@ def main() -> int:
     try:
         compiler = command_from_text(arguments.compiler, "compiler")
         make = command_from_text(os.environ.get("MAKE", "make"), "make")
-        cases = benchmark.select_cases(
-            benchmark.read_manifest(), arguments.cases, arguments.suite
-        )
+        cases = select_graphswitching_cases(arguments)
         amtog, labelg = benchmark.resolve_nauty(arguments.nauty_prefix)
         version = subprocess.run(
             [*compiler, "--version"], check=True, text=True,
@@ -117,9 +160,9 @@ def main() -> int:
         print(f"tune-gcc: {error}", file=sys.stderr)
         return 2
 
-    programs = list(dict.fromkeys(case.program for case in cases))
     print(f"compiler: {version}")
-    print(f"suite:    {arguments.suite if not arguments.cases else 'named cases'}")
+    print(f"program:  {PROGRAM}")
+    print(f"category: {arguments.suite if not arguments.cases else 'named cases'}")
     print(f"cases:    {len(cases)}")
     print(f"runs:     {arguments.runs}")
 
@@ -127,7 +170,7 @@ def main() -> int:
     try:
         for profile in PROFILES:
             print(f"\nBuilding {profile.name}: {profile.cflags}")
-            build(make, compiler, profile, programs)
+            build(make, compiler, profile)
             benchmark.validate_case_files(cases)
 
             total = 0.0
@@ -167,9 +210,9 @@ def main() -> int:
     print(f"\nRecommended CFLAGS={winner.cflags!r}")
     if "-march=native" in winner.flags:
         print("This build is optimized for this CPU and may not be portable.")
-    print("Rebuilding the benchmark programs with the recommended profile...")
+    print(f"Rebuilding {PROGRAM} with the recommended profile...")
     try:
-        build(make, compiler, winner, programs)
+        build(make, compiler, winner)
     except (OSError, subprocess.CalledProcessError) as error:
         print(f"tune-gcc: final rebuild failed: {error}", file=sys.stderr)
         return 2
