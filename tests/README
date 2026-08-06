@@ -4,7 +4,9 @@ make check runs the explicit WQH method in graphswitching and the original
 gen_all_srgs_wqh_generic program for every entry in cases.txt, then requires
 their output to be byte-for-byte identical. It also compares the default GM
 method with gen_all_srgs on Sp(6,2), and checks automatic order detection,
-n=... headers, file input/output, help, and version reporting.
+n=... headers, the 967-vertex limit, file input/output, help, and version
+reporting. check_graph6_output.py independently decodes direct graph6 records
+and compares them with the default matrix records.
 generate_algebraic_fixtures.py independently reconstructs the named
 symplectic, bilinear forms, generalized-quadrangle, and paper benchmark
 graphs. It checks their stored matrices and either their strongly regular
@@ -14,7 +16,10 @@ check_fixed_methods.py verifies the rational orthogonality and irreducible
 subgraph counts for every fixed Simoens--Van Overberghe catalogue, then
 exercises a guaranteed nontrivial ordinary switch for every method. Under
 make check-symmetry, it also requires ordinary and --sym enumeration to
-produce the same nonempty canonical class set on those examples.
+produce the same nonempty canonical class set on those examples. The CLI
+checks additionally verify that `--sym=auto` selects forced symmetry on
+Sp(6,2) and its automorphism-group-order-8 descendant, while selecting ordinary
+search on the asymmetric descendant.
 
 The same checker generates and validates the deterministic
 `witness-*.matrix` benchmark graphs. These plant an admissible embedding in

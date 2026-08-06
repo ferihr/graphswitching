@@ -322,8 +322,11 @@ def validate_witness_benchmarks(methods: Sequence[Method]) -> None:
         expected_input = witness_path(method).relative_to(ROOT).as_posix()
         counts = []
         for name, arguments in (
-            (stem, expected_arguments),
-            (f"{stem}-sym", [*expected_arguments, "--sym"]),
+            (stem, [*expected_arguments, "--format", "graph6"]),
+            (
+                f"{stem}-sym",
+                [*expected_arguments, "--sym", "--format", "graph6"],
+            ),
         ):
             row = rows.get(name)
             if row is None:

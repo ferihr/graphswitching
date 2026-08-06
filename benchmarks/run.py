@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run reproducible graphswitching benchmarks through the nauty pipeline."""
+"""Time switching programs and separately verify output with nauty."""
 
 from __future__ import annotations
 
@@ -40,6 +40,7 @@ class Timing:
     wall: float
     user: float
     system: float
+    validation_wall: float
     unique: int
 
 
@@ -56,8 +57,8 @@ def positive_integer(text: str) -> int:
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Benchmark graph switching, nauty conversion, canonical labeling, "
-            "and duplicate removal."
+            "Benchmark graph switching, then separately run canonical "
+            "labeling and duplicate-removal validation."
         )
     )
     parser.add_argument(
@@ -242,23 +243,27 @@ def validate_case_files(cases: Sequence[BenchmarkCase]) -> None:
         raise ValueError(f"missing benchmark input(s): {details}")
 
 
+def output_is_graph6(case: BenchmarkCase) -> bool:
+    for index, argument in enumerate(case.arguments):
+        if argument == "--format=graph6":
+            return True
+        if argument == "--format" and index + 1 < len(case.arguments):
+            return case.arguments[index + 1] == "graph6"
+    return False
+
+
 def run_pipeline(
     case: BenchmarkCase, amtog: Sequence[str], labelg: Sequence[str]
 ) -> Timing:
     program = ROOT / case.program
     input_path = ROOT / case.input_path
-    commands = [
-        [str(program), *case.arguments],
-        [*amtog, "-q"],
-        [*labelg, "-gqt"],
-        ["sort", "-u"],
-        ["wc", "-l"],
-    ]
+    commands = []
+    if not output_is_graph6(case):
+        commands.append([*amtog, "-q"])
+    commands.extend(([*labelg, "-gqt"], ["sort", "-u"], ["wc", "-l"]))
     sort_environment = os.environ.copy()
     sort_environment["LC_ALL"] = "C"
     processes: list[subprocess.Popen[bytes]] = []
-    usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
-    started = time.perf_counter()
 
     if input_path.suffix == ".gz":
         graph_input_context = tempfile.TemporaryFile()
@@ -266,10 +271,33 @@ def run_pipeline(
         graph_input_context.seek(0)
     else:
         graph_input_context = input_path.open("rb")
+
+    generated = tempfile.TemporaryFile()
+    usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
+    started = time.perf_counter()
     with graph_input_context as graph_input:
+        generator = subprocess.run(
+            [str(program), *case.arguments],
+            stdin=graph_input,
+            stdout=generated,
+            check=False,
+        )
+    generator_wall = time.perf_counter() - started
+    usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
+    if generator.returncode != 0:
+        command = shlex.join([str(program), *case.arguments])
+        generated.close()
+        raise RuntimeError(
+            f"{case.name}: generator failed: {command} exited "
+            f"{generator.returncode}"
+        )
+
+    generated.seek(0)
+    validation_started = time.perf_counter()
+    with generated:
         previous_stdout = None
         for index, command in enumerate(commands):
-            standard_input = graph_input if index == 0 else previous_stdout
+            standard_input = generated if index == 0 else previous_stdout
             environment = sort_environment if command[0] == "sort" else None
             process = subprocess.Popen(
                 command,
@@ -286,8 +314,7 @@ def run_pipeline(
         statuses = [process.wait() for process in processes[:-1]]
         statuses.append(processes[-1].returncode)
 
-    wall = time.perf_counter() - started
-    usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
+    validation_wall = time.perf_counter() - validation_started
     failures = [
         (shlex.join(command), status)
         for command, status in zip(commands, statuses)
@@ -307,9 +334,10 @@ def run_pipeline(
         ) from error
 
     return Timing(
-        wall=wall,
+        wall=generator_wall,
         user=usage_after.ru_utime - usage_before.ru_utime,
         system=usage_after.ru_stime - usage_before.ru_stime,
+        validation_wall=validation_wall,
         unique=unique,
     )
 
@@ -322,6 +350,9 @@ def median_timing(timings: Sequence[Timing]) -> Timing:
         wall=statistics.median(timing.wall for timing in timings),
         user=statistics.median(timing.user for timing in timings),
         system=statistics.median(timing.system for timing in timings),
+        validation_wall=statistics.median(
+            timing.validation_wall for timing in timings
+        ),
         unique=timings[0].unique,
     )
 
@@ -339,24 +370,26 @@ def print_results(
         f"{'case':<{case_width}}  "
         f"{'program':<{program_width}}  "
         f"{'unique':>6}  {'expected':>8}  "
-        f"{heading + 'real':>11}  "
-        f"{heading + 'user':>11}  "
-        f"{heading + 'sys':>11}"
+        f"{heading + 'gen real':>15}  "
+        f"{heading + 'gen user':>15}  "
+        f"{heading + 'gen sys':>15}  "
+        f"{heading + 'validate':>15}"
     )
     print(
         f"{'-' * case_width}  "
         f"{'-' * program_width}  "
         f"{'-' * 6}  {'-' * 8}  "
-        f"{'-' * 11}  {'-' * 11}  {'-' * 11}"
+        f"{'-' * 15}  {'-' * 15}  {'-' * 15}  {'-' * 15}"
     )
     for case, timing in results:
         print(
             f"{case.name:<{case_width}}  "
             f"{case.program:<{program_width}}  "
             f"{timing.unique:>6}  {case.expected_unique:>8}  "
-            f"{timing.wall:>10.3f}s  "
-            f"{timing.user:>10.3f}s  "
-            f"{timing.system:>10.3f}s"
+            f"{timing.wall:>14.3f}s  "
+            f"{timing.user:>14.3f}s  "
+            f"{timing.system:>14.3f}s  "
+            f"{timing.validation_wall:>14.3f}s"
         )
 
 

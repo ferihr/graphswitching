@@ -20,6 +20,14 @@ All modes use the same validity tests and switching transformation. The
 ordinary search traverses labelled candidates directly; `--sym` replaces
 those loops with orbit-representative loops and adds orbit-duplicate checks.
 
+## Automatic selection
+
+`--sym` always uses the algorithms below. `--sym=auto` first computes the
+same automorphism group, then uses orbit enumeration when the group order is
+at least 5. Smaller groups use the ordinary search because their limited
+pruning is unlikely to repay stabilizer/orbit overhead. Both options require
+a nauty-enabled build.
+
 ## GM4
 
 The GM search constructs unordered four-sets. Its tests are scheduled by
