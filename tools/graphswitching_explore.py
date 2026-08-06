@@ -23,7 +23,7 @@ from typing import Iterable, Sequence
 
 VERSION = "@GRAPHSWITCHING_VERSION@"
 GRAPH6_HEADER = ">>graph6<<"
-MAX_VERTICES = 1536
+MAX_VERTICES = 967
 SWITCHING_METHODS = (
     "gm",
     "wqh",

@@ -129,8 +129,11 @@ def select_graphswitching_cases(
 def build(
     make: list[str], compiler: list[str], profile: Profile,
 ) -> None:
+    temporary_parent = Path(tempfile.gettempdir()).resolve()
+    if temporary_parent == ROOT or ROOT in temporary_parent.parents:
+        temporary_parent = ROOT.parent
     with tempfile.TemporaryDirectory(
-        prefix=".graphswitching-gcc-", dir=ROOT
+        prefix="graphswitching-gcc-", dir=temporary_parent
     ) as temp_dir:
         environment = os.environ.copy()
         environment["TMPDIR"] = temp_dir
@@ -189,7 +192,7 @@ def main() -> int:
                 total += timing.wall
                 print(f" {timing.wall:.3f}s")
             scores[profile] = total
-            print(f"  total median real: {total:.3f}s")
+            print(f"  total median generator real: {total:.3f}s")
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"\ntune-gcc: {error}", file=sys.stderr)
         return 2
@@ -199,7 +202,10 @@ def main() -> int:
     default_time = scores[next(p for p in PROFILES if p.name == "default")]
     name_width = max(len("profile"), *(len(profile.name) for profile, _ in ranked))
     print("\nResults")
-    print(f"{'profile':<{name_width}}  {'median real':>11}  {'vs default':>10}")
+    print(
+        f"{'profile':<{name_width}}  "
+        f"{'generator':>11}  {'vs default':>10}"
+    )
     print(f"{'-' * name_width}  {'-' * 11}  {'-' * 10}")
     for profile, total in ranked:
         print(

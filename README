@@ -15,7 +15,7 @@ Programs
   graphswitching             GM, WQH, and fixed catalogue methods     Runtime options; recommended interface
   graphswitching-explore     Repeated switching rounds                graph6 input; parallel runtime options
 
-graphswitching supports at most 1536 vertices. Its WQH method has a maximum
+graphswitching supports at most 967 vertices. Its WQH method has a maximum
 part size of 8. There are also four legacy programs gen_all_srgs,
 gen_all_srgs_64vts, gen_all_srgs_wqh6, gen_all_srgs_wqh_generic which can be
 ignored.
@@ -60,7 +60,8 @@ graphswitching uses GM switching by default. All configuration is optional:
       -m METHOD, --method=METHOD
       -n N, --vertices=N
       -p P, --part-size=P
-      --sym
+      --sym[=auto]
+      -f FORMAT, --format=FORMAT
       -i FILE, --input=FILE
       -o FILE, --output=FILE
       -h, --help
@@ -109,6 +110,9 @@ representatives of the switching-set or partition orbits:
 orbits to retain switching representatives. It preserves the set of output
 isomorphism classes, but not raw output multiplicity or ordering, and it is
 not a general isomorphism filter. See docs/symmetry-search.md for pseudocode.
+`--sym=auto` also computes Aut(G), but uses orbit enumeration when the group
+order is at least 5; otherwise it runs the ordinary search. Plain `--sym`
+always forces orbit enumeration. Both modes require nauty support.
 
 WQH switching with parts of size 2,2,n-4 corresponds to four-vertex GM
 switching. The default uses the dedicated enumeration from gen_all_srgs,
@@ -122,7 +126,7 @@ The project version is recorded in VERSION and is available at run time:
 
 Output
 
-Output is written to standard output. The first line is:
+Output is written to standard output. The default matrix format starts with:
 
     n=<number of vertices>
 
@@ -141,11 +145,18 @@ prefixed gtools names are installed:
         | nauty-labelg -gqt \
         | LC_ALL=C sort -u > switched.g6
 
+Use `--format graph6` to write the same graphs directly as one graph6 record
+per line, avoiding the `amtog` conversion step:
+
+    ./graphswitching --format graph6 < adjacency-matrix.txt \
+        | nauty-labelg -gqt \
+        | LC_ALL=C sort -u > switched.g6
+
 nauty and Traces are optional. During make, the build checks whether the
 nauty headers and library are available. If they are, graphswitching gains
---sym support; otherwise the same program is built without that feature and
-reports a clear error if it is requested. See INSTALL for configuration
-examples.
+`--sym` and `--sym=auto` support; otherwise the same program is built without
+those features and reports a clear error if either is requested. See INSTALL
+for configuration examples.
 
 Iterated graph6 exploration
 
@@ -223,7 +234,10 @@ decides which newly generated graph classes enter the next round.
 Project layout
 
 -   include/graphswitching.h contains the public C interface.
--   src/graphswitching.c contains the reusable GM and WQH implementations.
+-   src/graphswitching.c contains the public API and search dispatcher.
+-   src/gm.c, src/wqh.c, and src/fixed.c contain the three search engines.
+-   src/symmetry.c contains automorphism and orbit handling.
+-   src/io.c contains matrix input and matrix/graph6 output.
 -   src/switching_methods.c contains the fixed switching matrices and
     irreducible switching-subgraph catalogues.
 -   docs/methodology.md records provenance and compares search methodologies.
@@ -237,9 +251,8 @@ Project layout
     the original, plus a generator/validator for the algebraic fixtures.
 -   benchmarks/ contains reproducible end-to-end timing cases.
 
-The command-line parsing and matrix output are kept separate from the search
-implementation so other input and output formats can be added without
-restructuring the switching algorithms.
+The command-line parser, graph I/O, symmetry support, and search families are
+separate modules so each can evolve without restructuring the others.
 
 Specialized builds
 
@@ -279,10 +292,11 @@ still be faster for asymmetric graphs or very small searches.
 
 Benchmarks
 
-The benchmarks/ directory contains reproducible end-to-end benchmarks.
-They run a switching program, convert its matrices with nauty, canonically
-label the graphs, remove duplicates, verify the number of isomorphism
-classes, and report wall, user, and system time.
+The benchmarks/ directory contains reproducible benchmarks. They time the
+switching program by itself, then separately canonically label its output,
+remove duplicates, and verify the number of isomorphism classes. Direct
+graph6 output is used for graphswitching; legacy matrix programs still pass
+through `amtog`.
 
 The default `short` suite is designed to finish within one minute on the
 reference machine. `full` adds every reasonably quick ordinary, symmetry,

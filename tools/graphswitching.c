@@ -78,10 +78,14 @@ static void print_help(FILE *stream, const char *program)
                 "  -p P, --part-size=P   set the method parameter P "
                 "(see the method table below)\n");
         fprintf(stream,
-                "      --sym              use input-graph symmetries to "
+                "      --sym[=auto]       use input-graph symmetries to "
                 "search switching orbit representatives\n"
-                "                         (requires nauty support in this "
-                "build; changes output multiplicity/order)\n");
+                "                         --sym forces symmetry search; "
+                "auto uses it only when worthwhile\n");
+        fprintf(stream,
+                "  -f FORMAT, --format=FORMAT\n"
+                "                         write matrix (default) or graph6 "
+                "output\n");
         fprintf(stream,
                 "  -i FILE, --input=FILE read FILE instead of standard "
                 "input; '-' means stdin\n");
@@ -109,9 +113,9 @@ static void print_help(FILE *stream, const char *program)
                 "  --part-size is required for ah, is3, and is5, and is "
                 "invalid for fano.\n"
                 "  WQH also requires 2P <= N. Every method supports "
-                "ordinary and --sym search.\n"
-                "  --sym computes Aut(G) once and searches stabilizer-"
-                "orbit representatives.\n\n");
+                "ordinary, --sym, and --sym=auto search.\n"
+                "  --sym and --sym=auto require nauty support in this "
+                "build.\n\n");
 
         fprintf(stream, "Input:\n");
         fprintf(stream,
@@ -123,8 +127,9 @@ static void print_help(FILE *stream, const char *program)
 
         fprintf(stream, "Output:\n");
         fprintf(stream,
-                "  An \"n=N\" line followed by every switched adjacency "
-                "matrix found.\n"
+                "  Matrix format writes an \"n=N\" line followed by every "
+                "switched matrix.\n"
+                "  Graph6 format writes one switched graph per line.\n"
                 "  --sym preserves output isomorphism classes, not raw "
                 "multiplicity or order.\n\n");
 
@@ -140,7 +145,8 @@ static void print_help(FILE *stream, const char *program)
                 program);
         fprintf(stream, "  %s --method gm --sym < graph.matrix\n", program);
         fprintf(stream,
-                "  %s --method wqh --part-size 4 --sym < graph.matrix\n\n",
+                "  %s --method wqh --part-size 4 --sym=auto "
+                "--format graph6 < graph.matrix\n\n",
                 program);
 
         fprintf(stream, "Exit status:\n");
@@ -219,6 +225,20 @@ static int parse_method(const char *text, enum command_line_method *method)
                 return 1;
         }
 
+        return 0;
+}
+
+static int parse_output_format(
+        const char *text, enum graphswitching_output_format *format)
+{
+        if (strcmp(text, "matrix") == 0) {
+                *format = GRAPHSWITCHING_OUTPUT_MATRIX;
+                return 1;
+        }
+        if (strcmp(text, "graph6") == 0) {
+                *format = GRAPHSWITCHING_OUTPUT_GRAPH6;
+                return 1;
+        }
         return 0;
 }
 
@@ -340,7 +360,35 @@ static int parse_command_line(int argc, char *argv[],
                         return 1;
                 }
                 if (strcmp(argument, "--sym") == 0) {
-                        command->switching.use_symmetry = 1;
+                        command->switching.symmetry_mode =
+                                GRAPHSWITCHING_SYMMETRY_ON;
+                        continue;
+                }
+                if (strcmp(argument, "--sym=auto") == 0) {
+                        command->switching.symmetry_mode =
+                                GRAPHSWITCHING_SYMMETRY_AUTO;
+                        continue;
+                }
+                if (strncmp(argument, "--sym=", 6) == 0) {
+                        fprintf(stderr,
+                                "%s: --sym accepts only the value 'auto'\n",
+                                program);
+                        return -1;
+                }
+
+                matched = option_value(argc, argv, &index, "--format",
+                                       'f', &value);
+                if (matched != 0) {
+                        if (matched < 0 ||
+                            !parse_output_format(
+                                    value,
+                                    &command->switching.output_format)) {
+                                fprintf(stderr,
+                                        "%s: --format must be matrix or "
+                                        "graph6\n",
+                                        program);
+                                return -1;
+                        }
                         continue;
                 }
 

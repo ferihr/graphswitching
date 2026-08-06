@@ -1,14 +1,18 @@
 Benchmarks
 
-These benchmarks measure the complete workflow used for switching
-experiments:
+These benchmarks measure the switching program and then validate its output
+with the workflow used for switching experiments:
 
-    switching program | amtog -q | labelg -gqt | sort -u | wc -l
+    graphswitching --format graph6 | labelg -gqt | sort -u | wc -l
 
-The runner checks the final number of pairwise nonisomorphic graphs and
-reports elapsed wall time plus the total user and system CPU time used by
-the pipeline. With multiple repetitions, it reports the median of each
-measurement.
+Legacy programs still use:
+
+    legacy program | amtog -q | labelg -gqt | sort -u | wc -l
+
+The runner first writes generator output to a temporary file and reports the
+generator's wall, user, and system time. It then reports canonical-validation
+wall time separately and checks the final number of pairwise nonisomorphic
+graphs. With multiple repetitions, it reports the median of each measurement.
 
 Requirements
 
@@ -43,7 +47,8 @@ There are three cumulative suites:
   - `short` is the default Sp(6,2) comparison and is designed to finish
     within one minute on the reference machine.
   - `full` adds every reasonably quick case: extended ordinary WQH and GM,
-    all `--sym` regressions, the nine paper examples, and deterministic
+    all `--sym` and selected `--sym=auto` regressions, eight in-range paper
+    examples, and deterministic
     paired ordinary and `--sym` witnesses for every fixed method not
     already covered by an output-producing standard graph.
   - `extrafull` runs every case. It adds the legacy Sp(4,4) WQH baseline,
@@ -73,8 +78,10 @@ graphs":
 
     https://ajc.maths.uq.edu.au/pdf/84/ajc_v84_p028.pdf
 
-The paper examples intentionally exercise complete search on the published
-inputs even when no changed class is emitted. The deterministic `witness-*`
+The in-range paper examples intentionally exercise complete search on the
+published inputs even when no changed class is emitted. The 1,296-vertex
+Hamming(4,6) example is retained as fixture data but is not executable under
+the exact 967-vertex limit. The deterministic `witness-*`
 cases complement them: each has a planted admissible embedding and paired
 ordinary/`--sym` rows, and is checked to produce switched graphs that are
 nonisomorphic to its input. Their orders are selected per method to keep the
@@ -99,8 +106,9 @@ with:
 The tuner excludes all legacy programs. Its `tuning` category contains 14
 output-producing cases, covers every switching-method catalogue, and includes
 both ordinary and `--sym` searches. It uses three runs by default, checks every
-isomorphism-class count, ranks profiles by the sum of their per-case median
-wall times, and rebuilds graphswitching with the winner. It compares `-O2`,
+isomorphism-class count in the separate canonical-validation stage, ranks
+profiles by the sum of generator-only median wall times, and rebuilds
+graphswitching with the winner. It compares `-O2`,
 `-O3`, the current `-O3 -funroll-loops` default, native versions with and
 without loop unrolling, and native LTO. Native profiles use `-march=native` and
 therefore produce binaries that may not run on a different CPU. Run on an

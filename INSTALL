@@ -14,7 +14,8 @@ automorphism group size filters use dreadnaut.
 
 The install target also uses a POSIX-style install command. nauty and
 Traces are optional. They are useful for converting and canonically
-labelling generated graphs, and the nauty library enables --sym.
+labelling generated graphs, and the nauty library enables --sym and
+--sym=auto.
 
 Build
 
@@ -48,11 +49,11 @@ path is detected by an ordinary:
 
     make
 
-When the check succeeds, graphswitching is built with --sym support. The
-option calls nauty directly to compute the input graph's full automorphism
-group and the stabilizer orbits required by the selected switching method.
-If the check fails, the rest of graphswitching is still built and --sym
-reports that nauty support is unavailable.
+When the check succeeds, graphswitching is built with symmetry support.
+Both --sym and --sym=auto call nauty directly to compute the input graph's
+full automorphism group. If the check fails, the rest of graphswitching is
+still built and either symmetry option reports that nauty support is
+unavailable.
 
 If the headers or library are in another location, supply them explicitly:
 
@@ -143,7 +144,7 @@ as well as the nauty-prefixed names used by some packages. Explicit command
 paths and a common prefix can also be supplied.
 
 Run ./graphswitching --help for the complete interface. The tool supports
-n <= 1536; WQH supports p <= 8. The original limits remain in
+n <= 967; WQH supports p <= 8. The original limits remain in
 code/gen_all_srgs_wqh_generic.c, while the new interface exposes its limits
 and version in include/graphswitching.h.
 

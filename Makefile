@@ -67,8 +67,17 @@ PROJECT_VERSION := $(shell sed -n '1p' $(VERSION_FILE))
 VERSION_CPPFLAGS := -DGRAPHSWITCHING_VERSION=\"$(PROJECT_VERSION)\"
 SOURCE_DIR := code
 INCLUDE_DIR := include
-LIBRARY_SOURCES := src/graphswitching.c src/switching_methods.c
-INTERNAL_HEADERS := src/switching_methods.h
+LIBRARY_SOURCES := \
+	src/graphswitching.c \
+	src/fixed.c \
+	src/gm.c \
+	src/wqh.c \
+	src/symmetry.c \
+	src/io.c \
+	src/switching_methods.c
+INTERNAL_HEADERS := \
+	src/graphswitching_internal.h \
+	src/switching_methods.h
 TOOL_SOURCE := tools/graphswitching.c
 EXPLORE_SOURCE := tools/graphswitching_explore.py
 LEGACY_PROGRAMS := \
@@ -135,6 +144,7 @@ check-symmetry: graphswitching
 check: $(PROGRAMS) $(TEST_CASES)
 	$(PYTHON) tests/generate_algebraic_fixtures.py
 	$(PYTHON) tests/check_fixed_methods.py --data-only
+	$(PYTHON) tests/check_graph6_output.py
 	PYTHONDONTWRITEBYTECODE=1 \
 		$(PYTHON) tests/test_graphswitching_explore.py
 	@for program in $(PROGRAMS); do \
@@ -160,7 +170,7 @@ check: $(PROGRAMS) $(TEST_CASES)
 	test "$$(./graphswitching --version)" = \
 		"graphswitching $$(sed -n '1p' VERSION)"; \
 	help=$$(./graphswitching --help); \
-	for option in --method --vertices --part-size --input --output \
+	for option in --method --vertices --part-size --format --input --output \
 		--sym --help --version; do \
 		printf '%s\n' "$$help" | grep -q -- "$$option"; \
 	done; \
@@ -198,6 +208,27 @@ check: $(PROGRAMS) $(TEST_CASES)
 			< tests/petersen.matrix > /dev/null; \
 		./graphswitching --method wqh --sym \
 			< tests/petersen.matrix > /dev/null; \
+		auto=$$(./graphswitching --method gm --vertices 63 \
+			--sym=auto --format graph6 \
+			< tests/symplectic-sp6-2.matrix | cksum); \
+		forced=$$(./graphswitching --method gm --vertices 63 \
+			--sym --format graph6 \
+			< tests/symplectic-sp6-2.matrix | cksum); \
+		test "$$auto" = "$$forced"; \
+		auto=$$(./graphswitching --method gm --vertices 63 \
+			--sym=auto --format graph6 \
+			< tests/symplectic-sp6-2-gm2-aut8.matrix | cksum); \
+		forced=$$(./graphswitching --method gm --vertices 63 \
+			--sym --format graph6 \
+			< tests/symplectic-sp6-2-gm2-aut8.matrix | cksum); \
+		test "$$auto" = "$$forced"; \
+		auto=$$(./graphswitching --method gm --vertices 63 \
+			--sym=auto --format graph6 \
+			< tests/symplectic-sp6-2-gm3-aut1.matrix | cksum); \
+		ordinary=$$(./graphswitching --method gm --vertices 63 \
+			--format graph6 \
+			< tests/symplectic-sp6-2-gm3-aut1.matrix | cksum); \
+		test "$$auto" = "$$ordinary"; \
 	else \
 		if ./graphswitching --method gm --sym \
 			< tests/petersen.matrix > /dev/null 2>&1; then \
@@ -207,7 +238,13 @@ check: $(PROGRAMS) $(TEST_CASES)
 			< tests/petersen.matrix > /dev/null 2>&1; then \
 			exit 1; \
 		fi; \
+		if ./graphswitching --method gm --sym=auto \
+			< tests/petersen.matrix > /dev/null 2>&1; then \
+			exit 1; \
+		fi; \
 	fi; \
+	if ./graphswitching --vertices 968 \
+		< tests/petersen.matrix > /dev/null 2>&1; then exit 1; fi; \
 	printf "Checking default GM against gen_all_srgs (Sp(6,2))... "; \
 	gm_legacy=$$(./gen_all_srgs \
 		< tests/symplectic-sp6-2.matrix | cksum); \
