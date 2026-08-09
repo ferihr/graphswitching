@@ -45,6 +45,7 @@ struct graphswitching_search_context {
                 GRAPHSWITCHING_MAX_VERTICES * GRAPHSWITCHING_BLOCK_COUNT];
         graphswitching_word_t c1_signatures[GRAPHSWITCHING_MAX_VERTICES];
         unsigned char c1_cross_degrees[GRAPHSWITCHING_MAX_VERTICES];
+        unsigned char in_partition[GRAPHSWITCHING_MAX_VERTICES];
         int c1_degrees[GRAPHSWITCHING_MAX_PART_SIZE];
         int c2_degrees[GRAPHSWITCHING_MAX_PART_SIZE];
         int c1_to_c2_degrees[GRAPHSWITCHING_MAX_PART_SIZE];

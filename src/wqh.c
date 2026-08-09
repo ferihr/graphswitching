@@ -36,19 +36,6 @@ static int partition_blocks_can_extend(
 static enum graphswitching_result apply_partition_global(
         struct graphswitching_search_context *context);
 
-static int partition_contains(const struct graphswitching_partition_vertex partition[],
-                              int last, int vertex)
-{
-        int index;
-
-        for (index = 0; index <= last; ++index) {
-                if (vertex == partition[index].vertex) {
-                        return 1;
-                }
-        }
-
-        return 0;
-}
 static void apply_wqh(struct graphswitching_search_context *context,
                       const int neighbour_counts[])
 {
@@ -61,8 +48,7 @@ static void apply_wqh(struct graphswitching_search_context *context,
                 int bit_index;
                 int index;
 
-                if (partition_contains(context->partition, 2 * part_size - 1,
-                                       vertex)) {
+                if (context->in_partition[vertex]) {
                         continue;
                 }
 
@@ -171,8 +157,7 @@ enum graphswitching_result graphswitching_choose_partition(
                             selected->vertex) {
                         continue;
                 }
-                if (partition_contains(context->partition, current - 1,
-                                       selected->vertex)) {
+                if (context->in_partition[selected->vertex]) {
                         continue;
                 }
                 if (part_size > 0 && current > part_size &&
@@ -185,6 +170,7 @@ enum graphswitching_result graphswitching_choose_partition(
                 selected->row_offset = selected->vertex * GRAPHSWITCHING_BLOCK_COUNT;
                 selected->word_index = selected->vertex >> GRAPHSWITCHING_BLOCK_SHIFT;
                 selected->bit_index = selected->vertex & GRAPHSWITCHING_BLOCK_MASK;
+                context->in_partition[selected->vertex] = 1;
                 add_partition_vertex(context, current);
 
                 if (current <= part_size / 2 || current == part_size) {
@@ -221,6 +207,7 @@ enum graphswitching_result graphswitching_choose_partition(
                         result = GRAPHSWITCHING_SUCCESS;
                 }
                 remove_partition_vertex(context, current);
+                context->in_partition[selected->vertex] = 0;
                 if (result != GRAPHSWITCHING_SUCCESS) {
                         return result;
                 }
@@ -583,9 +570,7 @@ static int partition_blocks_can_extend(
                 int index;
                 int possible;
 
-                if (partition_contains(
-                            context->partition,
-                            selected_count - 1, vertex)) {
+                if (context->in_partition[vertex]) {
                         continue;
                 }
                 if (first_selected == part_size) {
@@ -636,8 +621,7 @@ static enum graphswitching_result apply_partition_global(
         for (vertex = 0; vertex < context->vertex_count; ++vertex) {
                 int index;
 
-                if (partition_contains(context->partition, 2 * part_size - 1,
-                                       vertex)) {
+                if (context->in_partition[vertex]) {
                         continue;
                 }
 
