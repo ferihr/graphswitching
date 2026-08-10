@@ -44,7 +44,6 @@ class ExploreError(Exception):
 @dataclasses.dataclass(frozen=True)
 class Toolchain:
     graphswitching: tuple[str, ...]
-    amtog: tuple[str, ...]
     labelg: tuple[str, ...]
     dreadnaut: tuple[str, ...] | None
     sort: tuple[str, ...]
@@ -154,7 +153,7 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
             "  round-NNNN.g6    classes first found in that round\n"
             "  all.g6           accumulated classes\n\n"
             "Environment overrides:\n"
-            "  GRAPHSWITCHING, AMTOG, LABELG, DREADNAUT, SORT\n"
+            "  GRAPHSWITCHING, LABELG, DREADNAUT, SORT\n"
         ),
     )
     parser.add_argument(
@@ -252,12 +251,7 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
     programs.add_argument(
         "--nauty-prefix",
         metavar="PREFIX",
-        help="use PREFIXamtog, PREFIXlabelg, and PREFIXdreadnaut",
-    )
-    programs.add_argument(
-        "--amtog",
-        metavar="COMMAND",
-        help="amtog command, overriding AMTOG and auto-detection",
+        help="use PREFIXlabelg and PREFIXdreadnaut",
     )
     programs.add_argument(
         "--labelg",
@@ -380,17 +374,12 @@ def resolve_toolchain(options: argparse.Namespace) -> Toolchain:
     )
 
     if options.nauty_prefix is not None:
-        amtog_candidates = (f"{options.nauty_prefix}amtog",)
         labelg_candidates = (f"{options.nauty_prefix}labelg",)
         dreadnaut_candidates = (f"{options.nauty_prefix}dreadnaut",)
     else:
-        amtog_candidates = ("amtog", "nauty-amtog")
         labelg_candidates = ("labelg", "nauty-labelg")
         dreadnaut_candidates = ("dreadnaut", "nauty-dreadnaut")
 
-    amtog = resolve_command(
-        options.amtog, "AMTOG", amtog_candidates, "nauty amtog"
-    )
     labelg = resolve_command(
         options.labelg, "LABELG", labelg_candidates, "nauty labelg"
     )
@@ -415,7 +404,6 @@ def resolve_toolchain(options: argparse.Namespace) -> Toolchain:
     )
     return Toolchain(
         graphswitching=graphswitching,
-        amtog=amtog,
         labelg=labelg,
         dreadnaut=dreadnaut,
         sort=sort,
@@ -650,8 +638,14 @@ def run_switching_job(
 
     try:
         with output_path.open("wb") as output, error_path.open("w+b") as errors:
+            switch_command = [
+                *toolchain.graphswitching,
+                *switching.arguments(),
+                "--format",
+                "graph6",
+            ]
             switch = subprocess.Popen(
-                [*toolchain.graphswitching, *switching.arguments()],
+                switch_command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=errors,
@@ -659,25 +653,15 @@ def run_switching_job(
             )
             processes.append(switch)
             assert switch.stdout is not None
-            convert = subprocess.Popen(
-                [*toolchain.amtog, "-q"],
+            label = subprocess.Popen(
+                [*toolchain.labelg, "-qg"],
                 stdin=switch.stdout,
                 stdout=subprocess.PIPE,
                 stderr=errors,
                 env=environment,
             )
-            processes.append(convert)
-            switch.stdout.close()
-            assert convert.stdout is not None
-            label = subprocess.Popen(
-                [*toolchain.labelg, "-qg"],
-                stdin=convert.stdout,
-                stdout=subprocess.PIPE,
-                stderr=errors,
-                env=environment,
-            )
             processes.append(label)
-            convert.stdout.close()
+            switch.stdout.close()
             assert label.stdout is not None
             sort = subprocess.Popen(
                 [*toolchain.sort, "-u"],
@@ -707,8 +691,7 @@ def run_switching_job(
                 errors.seek(0)
                 detail = errors.read().decode("utf-8", "replace").strip()
                 commands = (
-                    [*toolchain.graphswitching, *switching.arguments()],
-                    [*toolchain.amtog, "-q"],
+                    switch_command,
                     [*toolchain.labelg, "-qg"],
                     [*toolchain.sort, "-u"],
                 )

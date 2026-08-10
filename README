@@ -219,9 +219,10 @@ filter applies to newly generated classes. This invariant is computed with
 dreadnaut. The equality option cannot be combined with the lower or upper
 bound options.
 
-graphswitching-explore requires Python 3, amtog, labelg, and the standard
-sort utility. Automorphism filtering additionally requires dreadnaut. It
-recognizes both unprefixed and nauty-prefixed gtools names. The AMTOG,
+graphswitching-explore requires Python 3, labelg, and the standard sort
+utility. It requests graph6 output directly from graphswitching, so amtog is
+not required. Automorphism filtering additionally requires dreadnaut. The
+program recognizes both unprefixed and nauty-prefixed gtools names. The
 LABELG, DREADNAUT, GRAPHSWITCHING, and SORT environment variables, or the
 corresponding command-line options, select nonstandard installations. Use
 --nauty-prefix to choose a common command prefix.

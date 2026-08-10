@@ -108,31 +108,23 @@ class DriverTests(unittest.TestCase):
 
     def make_fake_tools(self, directory: Path) -> dict[str, str]:
         graphswitching = directory / "fake-graphswitching"
-        amtog = directory / "fake-amtog"
         labelg = directory / "fake-labelg"
         dreadnaut = directory / "fake-dreadnaut"
 
         self.write_program(
             graphswitching,
             "import os, sys, time\n"
+            "if sys.argv[-2:] != ['--format', 'graph6']:\n"
+            "    sys.exit(2)\n"
             "sys.stdin.buffer.read()\n"
             "time.sleep(float(os.environ.get('FAKE_SWITCHING_DELAY', '0')))\n"
-            "sys.stdout.write("
-            "'n=4\\n0100\\n1010\\n0101\\n0010\\n\\n')\n",
-        )
-        self.write_program(
-            amtog,
-            "import sys\n"
-            "sys.stdout.buffer.write(sys.stdin.buffer.read())\n",
+            "sys.stdout.write('Ch\\n')\n",
         )
         self.write_program(
             labelg,
             "import sys\n"
             "data = sys.stdin.buffer.read()\n"
-            "if data.lstrip().startswith(b'n='):\n"
-            "    sys.stdout.write('Ch\\n')\n"
-            "else:\n"
-            "    sys.stdout.buffer.write(data)\n",
+            "sys.stdout.buffer.write(data)\n",
         )
         self.write_program(
             dreadnaut,
@@ -143,7 +135,6 @@ class DriverTests(unittest.TestCase):
         )
         return {
             "GRAPHSWITCHING": str(graphswitching),
-            "AMTOG": str(amtog),
             "LABELG": str(labelg),
             "DREADNAUT": str(dreadnaut),
         }
