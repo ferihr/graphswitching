@@ -519,7 +519,7 @@ def read_graph6_inputs(paths: Sequence[str]) -> list[str]:
     return records
 
 
-def canonicalize_graphs(
+def canonicalize_graph_chunk(
     records: Sequence[str], labelg: Sequence[str]
 ) -> list[str]:
     if not records:
@@ -552,7 +552,29 @@ def canonicalize_graphs(
         )
     for record in canonical:
         decode_graph6(record)
-    return sorted(set(canonical))
+    return canonical
+
+
+def canonicalize_graphs(
+    records: Sequence[str], labelg: Sequence[str], jobs: int
+) -> list[str]:
+    if not records:
+        return []
+    label_jobs = min(jobs, len(records))
+    chunks = [records[index::label_jobs] for index in range(label_jobs)]
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=label_jobs
+    ) as executor:
+        canonical_chunks = executor.map(
+            lambda chunk: canonicalize_graph_chunk(chunk, labelg), chunks
+        )
+        return sorted(
+            set(
+                record
+                for canonical_chunk in canonical_chunks
+                for record in canonical_chunk
+            )
+        )
 
 
 def prepare_output_directory(path: Path) -> Path:
@@ -1029,7 +1051,7 @@ def report(message: str, quiet: bool) -> None:
 def run(options: argparse.Namespace) -> int:
     toolchain = resolve_toolchain(options)
     raw_seeds = read_graph6_inputs(options.inputs)
-    seeds = canonicalize_graphs(raw_seeds, toolchain.labelg)
+    seeds = canonicalize_graphs(raw_seeds, toolchain.labelg, options.jobs)
     output_dir = Path(options.output_dir)
     work_dir = prepare_output_directory(output_dir)
     invariant_filter = None
