@@ -82,7 +82,7 @@ class AutomorphismFilter:
 
 @dataclasses.dataclass(frozen=True)
 class JobResult:
-    output_path: Path
+    output_paths: tuple[Path, ...]
     error_path: Path
 
 
@@ -179,7 +179,10 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
         type=positive_integer,
         default=max(1, os.cpu_count() or 1),
         metavar="N",
-        help="run at most N graphswitching processes in parallel (default: CPUs)",
+        help=(
+            "run up to N switching jobs and apportion N canonical-labelling "
+            "lanes among them (default: CPUs)"
+        ),
     )
     parser.add_argument(
         "-r",
@@ -620,15 +623,20 @@ def run_switching_job(
     job_number: int,
     record: str,
     round_number: int,
+    label_jobs: int,
     switching: Switching,
     toolchain: Toolchain,
     work_dir: Path,
     stop_event: threading.Event,
 ) -> JobResult:
     stem = f"round-{round_number:04d}-job-{job_number:08d}"
-    output_path = work_dir / f"{stem}.g6"
+    output_paths = tuple(
+        work_dir / f"{stem}-label-{label_number:04d}.g6"
+        for label_number in range(label_jobs)
+    )
     error_path = work_dir / f"{stem}.err"
     processes: list[subprocess.Popen[bytes]] = []
+    output_files = []
     environment = os.environ.copy()
     environment["LC_ALL"] = "C"
     environment["TMPDIR"] = str(work_dir)
@@ -637,7 +645,9 @@ def run_switching_job(
         raise concurrent.futures.CancelledError()
 
     try:
-        with output_path.open("wb") as output, error_path.open("w+b") as errors:
+        with error_path.open("w+b") as errors:
+            for output_path in output_paths:
+                output_files.append(output_path.open("wb"))
             switch_command = [
                 *toolchain.graphswitching,
                 *switching.arguments(),
@@ -653,25 +663,36 @@ def run_switching_job(
             )
             processes.append(switch)
             assert switch.stdout is not None
-            label = subprocess.Popen(
-                [*toolchain.labelg, "-qg"],
-                stdin=switch.stdout,
-                stdout=subprocess.PIPE,
-                stderr=errors,
-                env=environment,
-            )
-            processes.append(label)
-            switch.stdout.close()
-            assert label.stdout is not None
-            sort = subprocess.Popen(
-                [*toolchain.sort, "-u"],
-                stdin=label.stdout,
-                stdout=output,
-                stderr=errors,
-                env=environment,
-            )
-            processes.append(sort)
-            label.stdout.close()
+            label_inputs = []
+            commands = [switch_command]
+            sorts = []
+            for output in output_files:
+                label_command = [*toolchain.labelg, "-qg"]
+                label = subprocess.Popen(
+                    label_command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=errors,
+                    env=environment,
+                )
+                processes.append(label)
+                commands.append(label_command)
+                assert label.stdin is not None
+                assert label.stdout is not None
+                label_inputs.append(label.stdin)
+
+                sort_command = [*toolchain.sort, "-u"]
+                sort = subprocess.Popen(
+                    sort_command,
+                    stdin=label.stdout,
+                    stdout=output,
+                    stderr=errors,
+                    env=environment,
+                )
+                processes.append(sort)
+                commands.append(sort_command)
+                sorts.append(sort)
+                label.stdout.close()
 
             assert switch.stdin is not None
             try:
@@ -680,7 +701,35 @@ def run_switching_job(
             except BrokenPipeError:
                 pass
 
-            while sort.poll() is None:
+            dispatch_errors: list[BaseException] = []
+
+            def dispatch_graphs() -> None:
+                try:
+                    for graph_number, line in enumerate(switch.stdout):
+                        label_inputs[graph_number % label_jobs].write(line)
+                except BaseException as error:
+                    dispatch_errors.append(error)
+                finally:
+                    switch.stdout.close()
+                    for label_input in label_inputs:
+                        try:
+                            label_input.close()
+                        except OSError:
+                            pass
+
+            dispatcher = threading.Thread(target=dispatch_graphs)
+            dispatcher.start()
+            while dispatcher.is_alive():
+                if stop_event.wait(0.1):
+                    terminate_processes(processes)
+                    dispatcher.join()
+                    raise concurrent.futures.CancelledError()
+            dispatcher.join()
+            if dispatch_errors:
+                terminate_processes(processes)
+                raise dispatch_errors[0]
+
+            while any(sort.poll() is None for sort in sorts):
                 if stop_event.wait(0.1):
                     terminate_processes(processes)
                     raise concurrent.futures.CancelledError()
@@ -690,11 +739,6 @@ def run_switching_job(
                 errors.flush()
                 errors.seek(0)
                 detail = errors.read().decode("utf-8", "replace").strip()
-                commands = (
-                    switch_command,
-                    [*toolchain.labelg, "-qg"],
-                    [*toolchain.sort, "-u"],
-                )
                 failures = [
                     f"{shlex.join(command)} exited {status}"
                     for command, status in zip(commands, statuses)
@@ -708,13 +752,17 @@ def run_switching_job(
         raise ExploreError(f"could not run switching pipeline: {error}") from error
     except BaseException:
         terminate_processes(processes)
-        try:
-            output_path.unlink()
-        except OSError:
-            pass
+        for output_path in output_paths:
+            try:
+                output_path.unlink()
+            except OSError:
+                pass
         raise
+    finally:
+        for output in output_files:
+            output.close()
 
-    return JobResult(output_path=output_path, error_path=error_path)
+    return JobResult(output_paths=output_paths, error_path=error_path)
 
 
 def dreadnaut_graph(record: str) -> str:
@@ -816,25 +864,28 @@ def apply_automorphism_filter(
 
 
 def read_job_records(result: JobResult) -> list[str]:
+    records: set[str] = set()
     try:
-        with result.output_path.open(encoding="ascii") as source:
-            records = [line.strip() for line in source if line.strip()]
+        for output_path in result.output_paths:
+            with output_path.open(encoding="ascii") as source:
+                records.update(line.strip() for line in source if line.strip())
     except (OSError, UnicodeError) as error:
         raise ExploreError(
-            f"cannot read switching output '{result.output_path}': {error}"
+            f"cannot read switching output: {error}"
         ) from error
     finally:
-        try:
-            result.output_path.unlink()
-        except OSError:
-            pass
+        for output_path in result.output_paths:
+            try:
+                output_path.unlink()
+            except OSError:
+                pass
         try:
             result.error_path.unlink()
         except OSError:
             pass
     for record in records:
         decode_graph6(record)
-    return records
+    return sorted(records)
 
 
 def explore_round(
@@ -856,6 +907,8 @@ def explore_round(
     graph_limit_reached = False
     next_job = iter(enumerate(frontier))
     active: dict[concurrent.futures.Future[JobResult], int] = {}
+    switching_jobs = min(jobs, len(frontier))
+    base_label_jobs, extra_label_jobs = divmod(jobs, switching_jobs)
 
     def submit_one(
         executor: concurrent.futures.ThreadPoolExecutor,
@@ -869,6 +922,7 @@ def explore_round(
             job_number,
             record,
             round_number,
+            base_label_jobs + (job_number < extra_label_jobs),
             switching,
             toolchain,
             work_dir,
@@ -878,7 +932,7 @@ def explore_round(
         return True
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
-        for _ in range(min(jobs, len(frontier))):
+        for _ in range(switching_jobs):
             submit_one(executor)
 
         try:
