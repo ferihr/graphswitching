@@ -215,7 +215,22 @@ class DriverTests(unittest.TestCase):
             counts = sorted(
                 int(line) for line in log.read_text(encoding="ascii").splitlines()
             )
-            self.assertEqual(counts, [2, 3, 3])
+            self.assertEqual(counts, [1, 1, 3, 3])
+
+    def test_input_labelling_uses_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            log = base / "labelg.log"
+            result = self.run_driver(
+                base,
+                ["--rounds", "0"],
+                {"FAKE_LABELG_LOG": str(log)},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            counts = sorted(
+                int(line) for line in log.read_text(encoding="ascii").splitlines()
+            )
+            self.assertEqual(counts, [1, 1])
 
     def test_automorphism_size_filter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

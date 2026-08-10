@@ -191,11 +191,13 @@ The output directory must be new or empty. The program creates:
         The accumulated union of initial.g6 and every completed round file.
 
 The default is ten rounds and one parallel worker per available CPU. --jobs
-controls both pipeline stages: up to that many frontier graphs are switched
-concurrently, and the same number of labelg and sort lanes are apportioned
-among the active graphs. When a round has fewer frontier graphs than workers,
-each graph's output is divided between multiple labelling lanes. --processes
-is an alias for --jobs. There is no default wall-clock or graph-count limit.
+controls concurrency throughout the run: initial seeds are canonically labelled
+by up to that many labelg processes, up to that many frontier graphs are
+switched concurrently, and the same number of labelg and sort lanes are
+apportioned among the active graphs. When a round has fewer frontier graphs
+than workers, each graph's output is divided between multiple labelling lanes.
+--processes is an alias for --jobs. There is no default wall-clock or
+graph-count limit.
 Add either or both limits; the first reached limit stops the run:
 
     graphswitching-explore \
