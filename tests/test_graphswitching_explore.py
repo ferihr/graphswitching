@@ -118,12 +118,17 @@ class DriverTests(unittest.TestCase):
             "    sys.exit(2)\n"
             "sys.stdin.buffer.read()\n"
             "time.sleep(float(os.environ.get('FAKE_SWITCHING_DELAY', '0')))\n"
-            "sys.stdout.write('Ch\\n')\n",
+            "sys.stdout.write("
+            "'Ch\\n' * int(os.environ.get('FAKE_SWITCHING_COUNT', '1')))\n",
         )
         self.write_program(
             labelg,
-            "import sys\n"
+            "import os, sys\n"
             "data = sys.stdin.buffer.read()\n"
+            "log = os.environ.get('FAKE_LABELG_LOG')\n"
+            "if log:\n"
+            "    with open(log, 'a', encoding='ascii') as output:\n"
+            "        output.write(f'{len(data.splitlines())}\\n')\n"
             "sys.stdout.buffer.write(data)\n",
         )
         self.write_program(
@@ -193,6 +198,24 @@ class DriverTests(unittest.TestCase):
                 (output / "all.g6").read_text(encoding="ascii"), "Ch\nCl\n"
             )
             self.assertFalse((output / ".work").exists())
+
+    def test_labelling_is_parallelized_within_one_switching_job(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            log = base / "labelg.log"
+            result = self.run_driver(
+                base,
+                ["--rounds", "1"],
+                {
+                    "FAKE_LABELG_LOG": str(log),
+                    "FAKE_SWITCHING_COUNT": "6",
+                },
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            counts = sorted(
+                int(line) for line in log.read_text(encoding="ascii").splitlines()
+            )
+            self.assertEqual(counts, [2, 3, 3])
 
     def test_automorphism_size_filter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
