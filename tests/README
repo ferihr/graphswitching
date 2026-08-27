@@ -36,8 +36,9 @@ the default make check does not require nauty gtools.
 
 When graphswitching has nauty support and the nauty gtools are available,
 make check-symmetry checks GM --sym on Petersen, Clebsch, GQ(2,4), and
-Sp(6,2); WQH --sym on Sp(6,2), GQ(2,4), Bil(2,2,3), and Sp(4,4) is checked
-as well. The order-8 and asymmetric Sp(6,2) descendants are also included.
+Sp(6,2); WQH --sym on two disjoint K7s, Sp(6,2), GQ(2,4), Bil(2,2,3), and
+Sp(4,4) is checked as well. The order-8 and asymmetric Sp(6,2) descendants
+are also included.
 Each output is canonically labelled and required to contain the same
 expected isomorphism classes as the complete enumeration. This check
 intentionally does not require byte-for-byte output agreement.
@@ -66,6 +67,12 @@ clebsch
     Construction: Four-bit words in numeric order; words at Hamming
     distance 1 or 4 are adjacent.
     Test purpose: Medium switching and output test.
+
+two-disjoint-k7
+    Parameters: 14 vertices, p=6
+    Construction: Two disjoint copies of the complete graph K7.
+    Test purpose: Positive WQH p=6 regression exercising adjacency-pattern
+    masks while constructing both partition parts.
 
 generalized-quadrangle-gq2-4
     Parameters: SRG(27,10,1,5), p=5

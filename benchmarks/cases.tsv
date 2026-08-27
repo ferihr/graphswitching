@@ -27,6 +27,11 @@ petersen-gm-sym	full	graphswitching	--method gm --vertices 10 --sym --format gra
 # Clebsch graph
 clebsch-gm-sym	full	graphswitching	--method gm --vertices 16 --sym --format graph6	tests/clebsch.matrix	1	Clebsch setwise-stabilizer GM search
 
+# Two disjoint K7s
+two-k7-wqh-legacy-p6	full	gen_all_srgs_wqh_generic	14 6	tests/two-disjoint-k7.matrix	1	Legacy WQH p=6 positive baseline
+two-k7-wqh-p6	full	graphswitching	--method wqh --vertices 14 --part-size 6 --format graph6	tests/two-disjoint-k7.matrix	1	WQH p=6 adjacency-pattern matching
+two-k7-wqh-sym-p6	full	graphswitching	--method wqh --vertices 14 --part-size 6 --sym --format graph6	tests/two-disjoint-k7.matrix	1	WQH p=6 partition-orbit representatives
+
 # GQ(2,4)
 gq2-4-wqh-legacy-p5	full	gen_all_srgs_wqh_generic	27 5	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) legacy WQH 5,5,n-10
 gq2-4-wqh-p5	full	graphswitching	--method wqh --vertices 27 --part-size 5 --format graph6	tests/generalized-quadrangle-gq2-4.matrix	1	GQ(2,4) WQH 5,5,n-10
