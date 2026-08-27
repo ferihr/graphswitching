@@ -134,6 +134,7 @@ check-symmetry: graphswitching
 		clebsch-gm-sym \
 		gq2-4-gm-sym \
 		sp6-wqh-sym-p2 \
+		two-k7-wqh-sym-p6 \
 		gq2-4-wqh-sym-p5 \
 		bil223-wqh-sym-p3 \
 		sp4-4-wqh-sym-p4 \

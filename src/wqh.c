@@ -320,7 +320,8 @@ static int build_specialized_candidate_mask(
         int part_size = context->part_size;
         int word_index;
 
-        if (part_size < 3 || part_size > 5) {
+        /* At p=6 a completion still has at most 2^(p-1) = 32 patterns. */
+        if (part_size < 3 || part_size > 6) {
                 return 0;
         }
 

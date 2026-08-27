@@ -50,7 +50,9 @@ There are three cumulative suites:
     all `--sym` and selected `--sym=auto` regressions, eight in-range paper
     examples, and deterministic
     paired ordinary and `--sym` witnesses for every fixed method not
-    already covered by an output-producing standard graph.
+    already covered by an output-producing standard graph. It also includes
+    a compact positive WQH p=6 adjacency-pattern regression on two disjoint
+    copies of K7.
   - `extrafull` runs every case. It adds the legacy Sp(4,4) WQH baseline,
     which takes roughly 11 minutes by itself in the reference environment.
 
@@ -66,7 +68,7 @@ List the cases or run only named cases:
     python3 benchmarks/run.py --list
     make benchmark BENCHMARK_CASES="sp6-wqh-p2 paley73-wqh-p3"
     python3 benchmarks/run.py --runs 5 sp6-gm sp6-gm-packed
-    python3 benchmarks/run.py gq2-4-wqh-p5 bil223-wqh-p3 sp4-4-wqh-p4
+    python3 benchmarks/run.py two-k7-wqh-p6 gq2-4-wqh-p5 bil223-wqh-p3
 
 The case definitions live in cases.tsv and are ordered by input graph, so
 different programs and methods on the same graph appear next to each other.
